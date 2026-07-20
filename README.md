@@ -299,7 +299,7 @@ out_streams = ["order_info:WTI"]
 |:---|:----:|:------------:|:--------:|:------:| ----:|
 | 1. | None | `NullRecorder` | Null option. Use when recording is not needed. | ![Status](https://img.shields.io/badge/Done-2BB33D) | Docs |
 | 2. | SQLite (async) | `SqliteRecorder` | Light-weight file-based relational DB. | ![Status](https://img.shields.io/badge/Done-2BB33D) | Docs |
-| 3. | Postgres (async) | `PostgresRecorder` |  | ![Status](https://img.shields.io/badge/WIP-F54927) | Docs |
+| 3. | PostgresSQL (async) | `PostgresRecorder` |  | ![Status](https://img.shields.io/badge/WIP-F54927) | Docs |
 
 
 In a trade system, you can expect a setup similar to the followig example. We

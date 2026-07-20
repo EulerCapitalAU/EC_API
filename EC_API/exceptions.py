@@ -30,6 +30,20 @@ class InvalidNextStateError(StateControlError):
     def __init__(self, message: str):
         super().__init__(message)
 
+# --- Recorder ---
+class RecorderError(EC_APIError):...
+
+class RecorderOperationalError(RecorderError):
+    # Error in write to disk or conenction
+    # No Crash
+    def __init__(self, message: str):
+        super().__init__(message)
+
+class RecorderCriticalError(RecorderError):
+    # Require restart
+    def __init__(self, message: str):
+        super().__init__(message)
+
 # --- Common ---
 class DataBusError(EC_APIError):...
 
