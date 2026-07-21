@@ -15,7 +15,6 @@ class ConfigFormatError(ConfigError):
 # --- State Control ---
 class StateControlError(EC_APIError): ...
 
-
 class StartStateError(StateControlError):
     def __init__(self, message: str):
         super().__init__(message)
@@ -32,6 +31,10 @@ class InvalidNextStateError(StateControlError):
 
 # --- Recorder ---
 class RecorderError(EC_APIError):...
+
+class RowConversionError(RecorderError):
+    def __init__(self, message: str):
+        super().__init__(message)
 
 class RecorderOperationalError(RecorderError):
     # Error in write to disk or conenction

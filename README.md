@@ -22,11 +22,10 @@ trades, real-time data monitoring, open positions tracking, etc.
   - [2.1 Inter-Process Communication](#IPC)
   - [2.2 Recording/logging to Disk](#log-disk)
 - [3. Strategy Building](#strategy-building)
-  - [3.1 DataFeed and Tick Buffer](#datafeed)
-  - [3.2 Action Node](#action-node)
-  - [3.3 Action Tree](#action-tree)
-  - [3.4 OpSignal](#op-signal)
-  - [3.5 OpStrategy](#op-strategy)
+  - [3.1 DataFeed, Tick Buffer, and Stats](#datafeed)
+  - [3.2 Action Node and Action Tree](#action-node-tree)
+  - [3.3 OpSignal](#op-signal)
+  - [3.4 OpStrategy](#op-strategy)
 - [4. Engine Example](#engine-example)
 - [Tests]
     
@@ -265,7 +264,10 @@ async with TradeSessionCQG(conn) as TS:
     await ExecutePayload(live_order=LiveOrderCQG(TS)).unload(PL1)
     
 ```
-### **2.Communications
+### **2.Communications**
+`EC_API` provides build-in communications method between services and databases.
+In the sectiion, we show the supported IPC protocol and DB options.
+
 #### **2.1 Inter-Process Communications**
 Since data ingestion via `MonitorData` and trading via `TradeSession` often
 rely on separate account ids and connections, it is advisable to setup your 
@@ -294,7 +296,7 @@ in_streams = ["mkt_data:WTI", "mkt_data:Brent"]
 out_streams = ["order_info:WTI"]
 
 ```
-####**2.2 
+####**2.2 Recording/logging to Disk**
 | #  | DB Name | Object Name | Descriptions | Status | Docs |
 |:---|:----:|:------------:|:--------:|:------:| ----:|
 | 1. | None | `NullRecorder` | Null option. Use when recording is not needed. | ![Status](https://img.shields.io/badge/Done-2BB33D) | Docs |
@@ -302,10 +304,11 @@ out_streams = ["order_info:WTI"]
 | 3. | PostgresSQL (async) | `PostgresRecorder` |  | ![Status](https://img.shields.io/badge/WIP-F54927) | Docs |
 
 
-In a trade system, you can expect a setup similar to the followig example. We
+In a trading system, you can expect a setup similar to the followig example. We
 assume the trading decision is made elsewhere in a strategy processing unit, 
 and order_info is sent through the `RedisChannel` and the `TradeEninge` will
 package it and send it through to the broker.
+
 ```python
 from EC_API.channel.redis import RedisChannel
 from EC_API.recorders.sqlite_recorder import SqliteRecorder
