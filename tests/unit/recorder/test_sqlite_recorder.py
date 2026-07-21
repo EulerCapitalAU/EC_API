@@ -74,3 +74,5 @@ async def test_flush_triggers_at_stop(schema, db_path) -> None:
     assert await _count_rows(db_path) == 0  
     await recorder.stop()
     assert await _count_rows(db_path) == 2
+    
+# ---- Vendor-specific data types tests

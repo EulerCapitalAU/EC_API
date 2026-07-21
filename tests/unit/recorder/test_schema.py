@@ -6,7 +6,7 @@ def test_sql_schema_init_valid() -> None:
     ST = SQLSchemaTable(
         table_name = "test_table",
         columns = (
-            ('field_0', 'NULL'), 
+            ('field_0', 'ANY'), 
             ('field_1', 'INTEGER'), 
             ('field_2', 'REAL'), 
             ('field_3', 'TEXT'), 
@@ -16,15 +16,15 @@ def test_sql_schema_init_valid() -> None:
     
     assert ST.table_name == "test_table"
     assert ST.columns == (
-        ('field_0', 'NULL'), 
-        ('field_1', 'INTEGER'), 
-        ('field_2', 'REAL'), 
-        ('field_3', 'TEXT'), 
-        ('field_4', 'BLOB')
+        ('field_0', 'ANY', ''), 
+        ('field_1', 'INTEGER', ''), 
+        ('field_2', 'REAL', ''), 
+        ('field_3', 'TEXT', ''), 
+        ('field_4', 'BLOB', '')
     )
     
     create_q = ST.create_query()    
-    assert create_q == "CREATE TABLE IF NOT EXISTS test_table (\n field_0 NULL,\nfield_1 INTEGER,\nfield_2 REAL,\nfield_3 TEXT,\nfield_4 BLOB\n)"
+    assert create_q == "CREATE TABLE IF NOT EXISTS test_table (\n field_0 ANY,\nfield_1 INTEGER,\nfield_2 REAL,\nfield_3 TEXT,\nfield_4 BLOB\n)"
     
     insert_q_sqlite3 = ST.insert_query("sqlite3")
     assert insert_q_sqlite3 == "INSERT INTO test_table (field_0, field_1, field_2, field_3, field_4) VALUES (?, ?, ?, ?, ?)"
@@ -47,7 +47,7 @@ def test_sql_schema_wrong_type_in_column_invalid() -> None:
         SQLSchemaTable(
             table_name = "test_table",
             columns = (
-                ('field_0', 'NULL'), 
+                ('field_0', 'ANY'), 
                 (111, 'INTEGER'),  #<-- wrong type
             ))
         
@@ -56,7 +56,7 @@ def test_sql_schema_wrong_data_type_invalid() -> None:
         SQLSchemaTable(
             table_name = "test_table",
             columns = (
-                ('field_0', 'NULL'), 
+                ('field_0', 'ANY'), 
                 ('field_1', 'JUNK'),  #<-- wrong type
             ))
 
@@ -64,7 +64,7 @@ def test_sql_schema_() -> None:
     ST = SQLSchemaTable(
         table_name = "test_table",
         columns = (
-            ('field_0', 'NULL'), 
+            ('field_0', 'ANY'), 
             ('field_1', 'INTEGER'), 
             ('field_2', 'REAL'), 
             ('field_3', 'TEXT'), 
