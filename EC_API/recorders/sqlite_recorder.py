@@ -18,7 +18,7 @@ from EC_API.exceptions import (
     RecorderCriticalError
     )
 
-_TYPE_MAP = {
+_TYPE_MAP_SQL_PY = {
     "INTEGER": (int, bool), 
     "REAL": (float, int), 
     "TEXT": (str,), 
@@ -34,11 +34,11 @@ def _from_dict_to_row(msg: dict[str, Any], schema: SQLSchemaTable) -> tuple[Any,
         row = msg.get(col_name)
         if row is None:
             if "NOT NULL" in col_extra.upper():
-                raise RowConversionError(f"{col_name} contains value not of {col_typ} type.")
+                raise RowConversionError(f"Missing required value in {col_name}.")
             res.append(None)
             continue
         
-        if not isinstance(row, _TYPE_MAP[col_typ]):
+        if not isinstance(row, _TYPE_MAP_SQL_PY[col_typ]):
             raise RowConversionError(f"{col_name}: expected {col_typ}, got {type(row).__name__}.")
         res.append(row)
     return tuple(res)
@@ -66,7 +66,7 @@ class SQLiteRecorder(Recorder):
         
         # message format for logging
         # Conversion from raw message to DB format
-        self._to_row: Callable[[Any], tuple[Any]] = to_row if to_row is not None else _from_dict_to_row
+        self._to_row: Callable[[dict[str, Any], SQLSchemaTable], tuple[Any]] = to_row if to_row is not None else _from_dict_to_row
         
         # SQL commands
         self._insert_query: str = self._schema.insert_query('sqlite3')
@@ -88,7 +88,6 @@ class SQLiteRecorder(Recorder):
         self._rejected_schema = SQLSchemaTable(
             f"{self.schema.table_name}_rejected", reject_cols, strict=True
             )
-         
 
     async def start(self) -> None:
         try:
@@ -97,7 +96,7 @@ class SQLiteRecorder(Recorder):
             await self._db.execute("PRAGMA synchronous=NORMAL") 
             await self._db.execute(self._schema.create_query())
             
-            if self._policy == RecorderErrorPolicy.DROP:
+            if self._policy is RecorderErrorPolicy.DROP:
                 self._rejected_schema_init()
                 await self._db.execute(self._rejected_schema.create_query())
             await self._db.commit()
@@ -115,7 +114,7 @@ class SQLiteRecorder(Recorder):
         finally:
             try:
                 await self._db.close()
-            except sqlite3.IntegrityError as e:
+            except sqlite3.Error as e:
                 raise RecorderCriticalError(str(e)) from e
 
     async def record(self, msg: Any) -> None:
@@ -126,13 +125,15 @@ class SQLiteRecorder(Recorder):
             row = self._to_row(msg, self._schema)
             self._buf.append(row)
         except RowConversionError:
-            row = (time.time_ns(), json.dump(msg))
+            row = (time.time_ns(), json.dumps(msg))
             self._rejected.append(row)
-        
+            if self._policy is RecorderErrorPolicy.PROPAGATE:
+                raise
         # Note that this is a lazy check. Only upon a call does the recorder
         # flush the messages in the buffer.
         if (len(self._buf)>=self._batch_size or 
-            time.monotonic() - self._last_flush >= self._flush_interval
+            time.monotonic() - self._last_flush >= self._flush_interval or
+            len(self._rejected)>=self._batch_size
             ):
             await self._flush()
         
@@ -141,21 +142,34 @@ class SQLiteRecorder(Recorder):
             raise RecorderOperationalError("_flush() called without an established DB connection.") 
         
         try:
-            await self._db.executemany(self._insert_query, self._buf)
+            if self._buf:
+                await self._db.executemany(self._insert_query, self._buf)
+            
+            if self._policy is RecorderErrorPolicy.DROP:
+                
+                if self._buf:
+                    await self._db.executemany(
+                        self._rejected_schema.insert_query('sqlite3'), self._buf
+                        )
+                
             await self._db.commit()
+            self._rejected.clear()
             self._buf.clear()
-            
-            if self._policy == RecorderErrorPolicy.DROP:
-                await self._db.executemany(
-                    self._rejected_schema.insert_query('sqlite3'), self._rejected
-                    )
-                await self._db.commit()
-                self._rejected.clear()
-            
+
         except sqlite3.OperationalError as e:
+            await self._db.rollback()
             raise RecorderOperationalError(str(e)) from e
         except sqlite3.IntegrityError as e:
+            await self._db.rollback()
             raise RecorderCriticalError(str(e)) from e
+        except sqlite3.ProgrammingError as e:
+            await self._db.rollback()
+            raise RecorderOperationalError(str(e)) from e
+        except (OverflowError, sqlite3.Error) as e:
+            await self._db.rollback()
+            raise RecorderCriticalError(str(e)) from e
+        finally:
+            self._last_flush = time.monotonic()
+
             
-        self._last_flush = time.monotonic()
     

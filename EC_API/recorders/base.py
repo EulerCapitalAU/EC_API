@@ -52,8 +52,12 @@ class SQLSchemaTable:
         object.__setattr__(self, "columns", tuple(normalised_columns))
         
     @property
-    def column_names(self)->tuple:
+    def column_names(self)->tuple[str]:
         return tuple([name for name, _, _ in self.columns])
+    
+    @property
+    def insertable_columns(self) -> tuple[str]:
+        return tuple(c for c in self.columns if "AUTOINCREMENT" not in c[2].upper())
     
     def create_query(self) -> str:
         cols = ",\n".join(f"{col} {typ}" + (f" {extra}" if extra else "") for col, typ, extra in self.columns)
@@ -65,14 +69,15 @@ class SQLSchemaTable:
         return f"CREATE TABLE IF NOT EXISTS {self.table_name} (\n {cols}\n)" + (f" {optional}" if optional else "" )
         
     def insert_query(self, db_type: str) -> str:
-        col_name = ", ".join([x for x, _, _ in self.columns])
+        cols = self.insertable_columns
+        col_name = ", ".join([x for x, _, _ in cols])
         match db_type:
             case "aiosqlite" | "sqlite3":
-                placeholder = ", ".join(["?" for _ in self.columns]) 
+                placeholder = ", ".join(["?" for _ in cols]) 
             case "asyncpg":
-                placeholder = ", ".join([f"${i+1}" for i, _ in enumerate(self.columns)]) 
+                placeholder = ", ".join([f"${i+1}" for i, _ in enumerate(cols)]) 
             case "psycopg" | "pymysql" | "mysqlclient":
-                placeholder = ", ".join(["%s" for _ in self.columns]) 
+                placeholder = ", ".join(["%s" for _ in cols]) 
             case _:
                 raise ValueError(f"Invalid db_type: {db_type}. Only the following db are supported: {self._ALLOWED_DB}.")
                 
