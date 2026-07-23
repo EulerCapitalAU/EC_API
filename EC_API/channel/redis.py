@@ -32,8 +32,8 @@ class RedisChannel(Channel):
         # --- Redis Stream settings
         self.host_name: Optional[dict[str, str]] = None
 
-        self.out_streams: Optional[list[str]] = None
-        self.in_streams: Optional[list[str]] = None
+        self.out_streams: Optional[set[str]] = None
+        self.in_streams: Optional[set[str]] = None
         
         self.maxlen_out_stream: int = 50_000
         self.xread_block: int = 5000
@@ -58,8 +58,8 @@ class RedisChannel(Channel):
                 if not para.get("streams"):
                     raise KeyError("Field: 'streams' is missing in the toml file.")
                     
-                self.in_streams = para["streams"].get("in_streams", [])
-                self.out_streams = para["streams"].get("out_streams", [])
+                self.in_streams = set(para["streams"].get("in_streams", []))
+                self.out_streams = set(para["streams"].get("out_streams", []))
                 
                 if not (self.in_streams or self.out_streams):
                     raise KeyError("In field 'streams', at least one of these must be present: 'in_streams' and 'out_streams'.")
