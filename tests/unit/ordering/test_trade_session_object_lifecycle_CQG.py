@@ -13,6 +13,7 @@ from EC_API.connect.cqg.base import ConnectCQG
 from EC_API.connect.enums import ConnectionState
 from EC_API.ordering.cqg.trade_session import TradeSessionCQG
 from EC_API.utility.symbol_registry import SymbolRegistry
+from EC_API.exceptions import TradeSessionRequestError
 from tests.unit.fixtures.proxy_clients import FakeCQGClient, FakeTransport
 from tests.unit.fixtures.server_msg_builders_CQG import build_symbol_resolution_report_server_msg
 
@@ -37,47 +38,54 @@ async def test_context_manager_normal_enter_exit_valid() -> None:
 # --- Sad Paths aenter/aexit
 @pytest.mark.asyncio
 async def test_aenter_raises_on_conn_failure(mocker):
-    mock_conn = mocker.MagicMock()
-    mock_conn.__aexit__ = mocker.AsyncMock()
+    conn = ConnectCQG(
+        "host_name", "user_name", "password",
+        immediate_connect=False, client=FakeCQGClient(),
+    )
+    mocker.patch.object(conn, "start", return_value=False)  # connection refuses to come up
 
-    trade_session = TradeSessionCQG.__new__(TradeSessionCQG)
-    trade_session._conn = mock_conn
-    trade_session._cleanup = mocker.AsyncMock(side_effect=RuntimeError("unexpected"))
+    ts = TradeSessionCQG(conn)
 
-    with pytest.raises(RuntimeError):
-        await trade_session.__aexit__(None, None, None)
+    with pytest.raises(TradeSessionRequestError):
+        await ts.__aenter__()
 
-    mock_conn.__aexit__.assert_called_once()  # fails with current code
-
+    assert ts._tracker_task is None   # nothing was left running
+    
 @pytest.mark.asyncio
-async def test_aexit_conn_called_even_if_cleanup_raises(mocker):
-    mock_conn = mocker.MagicMock()
-    mock_conn.__aexit__ = mocker.AsyncMock()
+async def test_aexit_conn_stopped_even_if_cleanup_raises(mocker):
+    conn = ConnectCQG(
+        "host_name", "user_name", "password",
+        immediate_connect=False, client=FakeCQGClient(),
+    )
+    ts = TradeSessionCQG(conn)
+    await ts.__aenter__()
 
-    trade_session = TradeSessionCQG.__new__(TradeSessionCQG)
-    trade_session._conn = mock_conn
-    trade_session._cleanup = mocker.AsyncMock(side_effect=RuntimeError("unexpected"))
+    ts._cleanup = mocker.AsyncMock(side_effect=RuntimeError("unexpected"))
+    spy_stop = mocker.spy(conn, "stop")
 
     with pytest.raises(RuntimeError):
-        await trade_session.__aexit__(None, None, None)
+        await ts.__aexit__(None, None, None)
 
-    mock_conn.__aexit__.assert_called_once()  # fails with current code
-
+    spy_stop.assert_awaited_once()          # teardown happened despite the failure
+    assert ts.state == ConnectionState.CLOSED
 
 @pytest.mark.asyncio
 async def test_aexit_normal(mocker):
-    mock_conn = mocker.MagicMock()
-    mock_conn.__aexit__ = mocker.AsyncMock()
+    conn = ConnectCQG(
+        "host_name", "user_name", "password",
+        immediate_connect=False, client=FakeCQGClient(),
+    )
+    ts = TradeSessionCQG(conn)
+    await ts.__aenter__()
 
-    trade_session = TradeSessionCQG.__new__(TradeSessionCQG)
-    trade_session._conn = mock_conn
-    trade_session._cleanup = mocker.AsyncMock()
+    ts._cleanup = mocker.AsyncMock()
 
-    result = await trade_session.__aexit__(None, None, None)
+    result = await ts.__aexit__(None, None, None)
 
-    trade_session._cleanup.assert_awaited_once()
-    mock_conn.__aexit__.assert_awaited_once_with(None, None, None)
+    ts._cleanup.assert_awaited_once()
     assert result is False
+    assert ts.state == ConnectionState.CLOSED
+    assert ts._tracker_task.done()
     
     
 # --- Cleanup Success ---
@@ -170,7 +178,7 @@ async def test_trade_session_start_stop_lifecycle() -> None:
     TS = TradeSessionCQG(conn)
 
     # --- start()
-    TS.start()
+    await TS.start()
 
     assert TS.state == ConnectionState.CONNECTED_DEFAULT
     assert TS._tracker_task is not None
