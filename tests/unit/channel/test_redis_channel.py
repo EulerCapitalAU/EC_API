@@ -32,8 +32,8 @@ def test_redis_channel_load_tcp_valid() -> None:
     RC = RedisChannel()
     RC.load(TEST_TOML_TCP_SOCKET)
     assert RC.host_name['URL'] == "redis://localhost:16379"
-    assert RC.in_streams == ["mkt_data:cqg", "mkt_data:fix"]
-    assert RC.out_streams == ["processed_data"]
+    assert RC.in_streams == {"mkt_data:cqg", "mkt_data:fix"}
+    assert RC.out_streams == {"processed_data"}
     assert list(RC.last_ids.keys()) == ["mkt_data:cqg", "mkt_data:fix"]
     assert list(RC.last_ids.values()) == ["0", "0"]
     
@@ -41,8 +41,8 @@ def test_redis_channel_load_uds_valid() -> None:
     RC = RedisChannel()
     RC.load(TEST_TOML_UDS)
     assert RC.host_name['URL'] == "unix:///tmp/redis.sock"
-    assert RC.in_streams == ["mkt_data:cqg", "mkt_data:fix"]
-    assert RC.out_streams == ["processed_data"]
+    assert RC.in_streams == {"mkt_data:cqg", "mkt_data:fix"}
+    assert RC.out_streams == {"processed_data"}
     assert list(RC.last_ids.keys()) == ["mkt_data:cqg", "mkt_data:fix"]
     assert list(RC.last_ids.values()) == ["0", "0"]
     
@@ -118,8 +118,8 @@ async def test_redis_channel_broadcast_valid(redis_client) -> None:
     RC = RedisChannel()
     RC.r = redis_client
     RC.host_name = {'URL': "redis://localhost:16379"}
-    RC.out_streams = ["processed_data"]
-    RC.in_streams = ["mkt_data:cqg", "mkt_data:fix"]
+    RC.out_streams = {"processed_data"}
+    RC.in_streams = {"mkt_data:cqg", "mkt_data:fix"}
     RC.last_ids = {"mkt_data:cqg": "$", "mkt_data:fix": "$"}
 
     parsed_msg = ('1', 2, 3.0, True)
@@ -143,8 +143,8 @@ async def test_redis_channel_broadcast_invalid_exception(redis_client) -> None:
     RC = RedisChannel()
     RC.r = redis_client
     RC.host_name = {'URL': "redis://localhost:16379"}
-    RC.out_streams = ["processed_data"]
-    RC.in_streams = ["mkt_data:cqg", "mkt_data:fix"]
+    RC.out_streams = {"processed_data"}
+    RC.in_streams = {"mkt_data:cqg", "mkt_data:fix"}
     RC.last_ids = {"mkt_data:cqg": "$", "mkt_data:fix": "$"}
     
     unpacked_msg = (object(),)
@@ -157,8 +157,8 @@ async def test_redis_channel_listen_valid(redis_client) -> None:
     RC = RedisChannel()
     RC.r = redis_client
     RC.host_name = {'URL': "redis://localhost:16379"}
-    RC.out_streams = ["processed_data"]
-    RC.in_streams = ["mkt_data:cqg", "mkt_data:fix"]
+    RC.out_streams = {"processed_data"}
+    RC.in_streams = {"mkt_data:cqg", "mkt_data:fix"}
     RC.last_ids = {"mkt_data:cqg": "0", "mkt_data:fix": "0"}
 
     parsed_msg = ('1', 2, 3.0, True)
@@ -190,8 +190,8 @@ async def test_redis_channel_listen_invalid_exceed_one_listener(redis_client) ->
     RC = RedisChannel()
     RC.r = redis_client
     RC.host_name = {'URL': "redis://localhost:16379"}
-    RC.out_streams = ["processed_data"]
-    RC.in_streams = ["mkt_data:cqg", "mkt_data:fix"]
+    RC.out_streams = {"processed_data"}
+    RC.in_streams = {"mkt_data:cqg", "mkt_data:fix"}
     RC.last_ids = {"mkt_data:cqg": "0", "mkt_data:fix": "0"}
     
     RC._active_listeners.add("mkt_data:cqg")
@@ -205,8 +205,8 @@ async def test_redis_channel_listen_invalid_empty_msg(redis_client) -> None:
     RC.r = redis_client
     RC.xread_block = 100
     RC.host_name = {'URL': "redis://localhost:16379"}
-    RC.out_streams = ["processed_data"]
-    RC.in_streams = ["mkt_data:cqg", "mkt_data:fix"]
+    RC.out_streams = {"processed_data"}
+    RC.in_streams = {"mkt_data:cqg", "mkt_data:fix"}
     RC.last_ids = {"mkt_data:cqg": "0", "mkt_data:fix": "0"}
     
     data = await RC.listen("mkt_data:cqg",'data')

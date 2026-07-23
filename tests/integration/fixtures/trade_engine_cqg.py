@@ -34,6 +34,7 @@ class TradeEngineCQG:
         
         # ---- Engine property ----
         self._stop_evt = asyncio.Event()
+        self.state = None
         
         # ---- Engine Containers ----
         self._send_order_tasks: dict[str, asyncio.Task] = dict()
