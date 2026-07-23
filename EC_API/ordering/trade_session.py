@@ -17,7 +17,6 @@ from EC_API._typing import (
     ContractMetaDataType,
 )
 
-
 class TradeSession(Protocol):
     # --- Properties ---
     @property

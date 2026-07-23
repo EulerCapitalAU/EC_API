@@ -5,7 +5,6 @@ import asyncpg
 from EC_API.recorders.base import SQLSchemaTable, Recorder
 
 class PostgresRecorder(Recorder):
-    
     def __init__(
             self,
             schema: SQLSchemaTable,
@@ -15,8 +14,10 @@ class PostgresRecorder(Recorder):
             to_row: Optional[Callable[[Any], tuple[Any]]] = None
         ):
         ...
+        self._db = None
+        
     @property
-    def schema(self):
+    def schema(self) ->SQLSchemaTable:
         return
     
     async def start(self):
@@ -24,4 +25,9 @@ class PostgresRecorder(Recorder):
         
     async def stop(self):...
     
-    async def record(self, msg: Any)
+    async def record(self, msg: Any):
+        ...
+        
+    async def _flush(self):...
+    
+    

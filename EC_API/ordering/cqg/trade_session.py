@@ -19,6 +19,8 @@ from EC_API.ordering.cqg.builders import (
     build_trade_historical_orders_request_msg,
 )
 from EC_API.ordering.cqg.parsers import ordering_parsers
+from EC_API.recorders.base import Recorder
+from EC_API.recorders.null_recorder import NullRecorder
 from EC_API.protocol.cqg.parser_util import parse_server_msg
 from EC_API.utility.symbol_registry import SymbolRegistry
 from EC_API.utility.error_handlers import msg_io_error_handler
@@ -56,6 +58,7 @@ class TradeSessionCQG:
     def __init__(
         self,
         conn: ConnectCQG,
+        recorder: Recorder = NullRecorder()
     ):
         # --- Connect ---
         self._conn = conn
@@ -64,7 +67,10 @@ class TradeSessionCQG:
         # --- Event Loop ---
         self._tracker_task: Optional[asyncio.Task] = None
         self._stop_evt: asyncio.Event = self._conn._stop_evt
-
+        
+        # --- Logging/Recorder (Audit Log) ---
+        self._recorder: Recorder = recorder
+        
         # --- Routers ---
         self._exec_stream_router = self._conn._exec_stream_router
         self._pos_status_stream_router = self._conn._pos_status_stream_router
@@ -99,6 +105,10 @@ class TradeSessionCQG:
         # Settings
         self.order_statuses_TTL: int = 10  # (Time-to-live in Seconds)
 
+        # States
+        self._started: bool = False
+        self._stopped: bool = False
+        
     # --- Property ---
     @property
     def conn(self):
@@ -117,23 +127,13 @@ class TradeSessionCQG:
 
     # ---- Dunder meothos ---
     async def __aenter__(self):
-        await self._conn.__aenter__()  # starts the connection
-        self._tracker_task = asyncio.create_task(self._tracker_loop())
-
+        if not await self.start():
+            await self.stop()
+            raise TradeSessionRequestError("Failed to start TradeSessionCQG.")
         return self
 
     async def __aexit__(self, *args) -> bool:
-        tracker_task = getattr(self, "_tracker_task", None)
-        if tracker_task and not tracker_task.done():
-            tracker_task.cancel()
-            try:
-                await tracker_task
-            except asyncio.CancelledError:
-                pass
-        try:
-            await self._cleanup()
-        finally:
-            await self._conn.__aexit__(*args)
+        await self.stop()
         return False
 
     # --- Checks
@@ -234,7 +234,7 @@ class TradeSessionCQG:
                     self._pos_status_stream_router.unsubscribe(contract_id, q)
                     logger.info("Position for contract_id: %s reached terminal state", contract_id)
 
-                # TODO: TTL retirement for snapshots if scale demands it
+                #!!! TODO: TTL retirement for snapshots if the scale demands it
 
             except asyncio.CancelledError as e:
                 logger.error(str(e))
@@ -343,19 +343,41 @@ class TradeSessionCQG:
             return server_msg
 
     # --- Lifecycle ---
-    def start(self) -> bool:
+    async def start(self) -> bool:
+        if self._started:
+            logger.warning("TradeSessionCQG.start() called in an active session.")
+            return True
+        
         start_success = self._conn.start()
+        
+        if not start_success:
+            await self._recorder.stop()
+            return False
+            
         self._tracker_task = asyncio.create_task(self._tracker_loop())
+        if start_success:
+            await self._recorder.start()
+            self._started = True
         return start_success
 
     async def stop(self) -> bool:
+        if (not self._started) or (self._stopped):
+            logger.warning("TradeSessionCQG.stop() called without an active session.")
+            return False
+        
         if self._tracker_task and not self._tracker_task.done():
             self._tracker_task.cancel()
             try:
                 await self._tracker_task
             except asyncio.CancelledError:
                 pass
-        stop_success = await self._conn.stop()
+        try:    
+            await self._cleanup()
+        finally:
+            stop_success = await self._conn.stop()
+            await self._recorder.stop()
+            self._stopped, self._started = True, False
+            
         return stop_success
 
     async def _cleanup(self) -> None:
