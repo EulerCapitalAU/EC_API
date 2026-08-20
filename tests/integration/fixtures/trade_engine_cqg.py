@@ -1,22 +1,34 @@
 import asyncio
+import logging
+from EC_API.channel.base import Channel
 from EC_API.channel.redis import RedisChannel
+from EC_API.connect.base import Connect
 from EC_API.connect.cqg.base import ConnectCQG
+from EC_API.ordering.trade_session import TradeSession
 from EC_API.ordering.cqg.trade_session import TradeSessionCQG
 from EC_API.ordering.cqg.live_order import LiveOrderCQG
 from EC_API.ordering.enums import RequestType, SubScope
 from EC_API.payload.base import Payload, ExecutePayload
 from EC_API.payload.safety import PreTradeRiskCheck
-from EC_API.recorders.base import SQLSchemaTable
+from EC_API.recorders.base import SQLSchemaTable, Recorder
 from EC_API.recorders.sqlite_recorder import SQLiteRecorder
 from EC_API.exceptions import ChannelMissingSettingError
 
 HOST_NAME, USR_NAME, PASSWORD, ACCOUNT_ID = 0, 0, 0, 0
 
+logger = logging.getLogger(__name__)
+
+# Controller class??
+
 class TradeEngineCQG:
-    def __init__(self, channel_cfg_addr: str, pretraderisk_cfg_addr:str):
+    def __init__(
+            self, 
+            channel_cfg_addr: str, 
+            pretraderisk_cfg_addr:str
+        ):
         # ---- IPC Channel setting ----
-        self.channel = RedisChannel(channel_cfg_addr)
-        self.recorder = SQLiteRecorder(
+        self.channel: Channel = RedisChannel(channel_cfg_addr)
+        self.recorder: Recorder = SQLiteRecorder(
             schema = SQLSchemaTable(
                 table_name = "test_trade_engine_audit", 
                 columns = (("", "", ""), ("", "", ""),)
@@ -25,37 +37,49 @@ class TradeEngineCQG:
             )
             
         # ---- Sessions setting ----
-        self.conn = ConnectCQG(HOST_NAME, USR_NAME, PASSWORD, ACCOUNT_ID)
-        self.trade_session = TradeSessionCQG(self.conn, recorder=self.recorder)
+        self.conn: Connect = ConnectCQG(HOST_NAME, USR_NAME, PASSWORD, ACCOUNT_ID)
+        self.trade_session: TradeSession = TradeSessionCQG(self.conn, recorder=self.recorder)
         
         # ---- Risk checks ----
-        self.PREC = PreTradeRiskCheck('cqg')
+        self.PREC: PreTradeRiskCheck = PreTradeRiskCheck('cqg')
         self.PREC.load(pretraderisk_cfg_addr)
         
         # ---- Engine property ----
-        self._stop_evt = asyncio.Event()
+        self._stop_evt: asyncio.Event = asyncio.Event()
         self.state = None
         
         # ---- Engine Containers ----
         self._send_order_tasks: dict[str, asyncio.Task] = dict()
-     
+        
+        # ---- Channel ----
+        self.CTRL_STREAM: str = "CMD:Trade_Engine"
+        
     # ------- Manual control methods 
-    def add_in_stream(self, in_stream_name: str):
+    def add_in_stream(self, in_stream_name: str) -> None:
         if in_stream_name in self.channel.in_streams:
             return
-        # BEfore adding, either ask for pre-trade risk parameters or load a preset
-        # Add in_stream, add symbols, do trade subscription
-        # ...
-        self.channel.in_streams.add(in_stream_name)
-                
-        self._send_order_tasks[in_stream_name] = asyncio.create_task(
-            self._send_order_loop(in_stream_name)
-            )
+        
+        # See if pre-trade risk para is present
+        
+        # Before adding, either ask for pre-trade risk parameters or load a preset
+        
+        try:
+            # do trade subscription
+            self.trade_session.trade_subscription_request(sub_id, sub_scope)
+            # Add in_stream, add symbols, 
+            self.channel.in_streams.add(in_stream_name)
+                    
+            # For each new in_stream added, make a new async task send_loop
+            self._send_order_tasks[in_stream_name] = asyncio.create_task(
+                self._send_order_loop(in_stream_name)
+                )
+        except:
+            ...
 
-    def remove_in_stream(self, in_stream_name: str):
-        # unsub trade, remove out_Stream
+    def remove_in_stream(self, in_stream_name: str) -> None:
+        # unsub trade
         
-        
+        # remove out_stream
         task = self._tasks.pop(in_stream_name, None)
         if task is not None:
             task.cancel()
@@ -66,18 +90,32 @@ class TradeEngineCQG:
         self.channel.in_streams.discard(in_stream_name)
         self.channel.last_ids.pop(in_stream_name, None)   
         
-    # ------- Engine Controls
-    async def control_loop(self):
-        # Listen to control command and add/remove in_stream
-        
+
+    # ------- Controls
+    async def _control_loop(self):
         # cmd: add_stream, remove_stream, start_engine, stop_engine
-        ...
-    
-    # ------- Engine functions
+        while not self._stop_evt.is_set():
+            try:
+                # Listen to control command and add/remove in_stream
+                cmd = await self.channel.listen(stream_name=self.CTRL_STREAM, data_name="")
+                
+                match cmd[0]: # ("ADD", "order_info:WTI")
+                    case "ADD":
+                        self.add_in_stream(cmd[1])
+                    case "REMOVE":
+                        self.remove_in_stream(cmd[1])
+                    case _:
+                        logger.warning("[Trade Engine] Unknown Command: %s", cmd[0])
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error("control_loop error: %s", e, exc_info=True)
+            
+    # ------- Engine functions (Trade)
     async def _package_and_send(
         self, 
         trade_session: TradeSessionCQG, 
-        order_type: RequestType, order_info: dict):
+        order_type: RequestType, order_info: dict) -> None:
         PL = Payload(
           order_request_type = order_type,
           order_info = order_info,
@@ -85,8 +123,8 @@ class TradeEngineCQG:
           )
         await ExecutePayload(live_order=LiveOrderCQG(trade_session)).unload(PL)
 
-    async def _send_order_loop(self, in_stream_name: str):
-        while not self._stop_evt:
+    async def _send_order_loop(self, in_stream_name: str) -> None:
+        while not self._stop_evt.is_set():
             # Continuous listening to the latest order instruction from redis stream
             msg = await self.channel.listen(in_stream_name) 
             
@@ -104,10 +142,11 @@ class TradeEngineCQG:
         try:
             self.channel.connect()
         except ChannelMissingSettingError as e:
-            print("")
+            logger.warning("[Trade Engine]: " + str(e))
             
         # start trade session
         self.trade_session.start()
+        
         # subscribe all the trade subscriptions and pre-resolve symbols
         for stream_name in self.channel.in_streams:
             ...
