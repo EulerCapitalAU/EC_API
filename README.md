@@ -296,7 +296,7 @@ in_streams = ["mkt_data:WTI", "mkt_data:Brent"]
 out_streams = ["order_info:WTI"]
 
 ```
-####**2.2 Recording/logging to Disk**
+#### **2.2 Recording/logging to Disk**
 | #  | DB Name | Object Name | Descriptions | Status | Docs |
 |:---|:----:|:------------:|:--------:|:------:| ----:|
 | 1. | None | `NullRecorder` | Null option. Use when recording is not needed. | ![Status](https://img.shields.io/badge/Done-2BB33D) | Docs |
