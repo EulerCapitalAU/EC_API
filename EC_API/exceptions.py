@@ -307,6 +307,13 @@ class ChannelListenError(ChannelError):
     def __init__(self, message: str):
         super().__init__(message)
 
+# --- Controller
+class ControllerError(EC_APIError): ...
+
+class ControllerInputError(ControllerError):
+    def __init__(self, message: str):
+        super().__init__(message)
+
 
 # --- OpStrategy
 class OpStrategyError(EC_APIError): ...

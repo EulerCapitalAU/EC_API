@@ -16,7 +16,8 @@ from EC_API.recorders.sqlite_recorder import SQLiteRecorder
 from EC_API.exceptions import (
     ChannelMissingSettingError, 
     TradeSessionRequestError,
-    TradeSessionTimeOutError
+    TradeSessionTimeOutError,
+    ControllerInputError
     )
 
 HOST_NAME, USR_NAME, PASSWORD, ACCOUNT_ID = 0, 0, 0, 0
@@ -44,19 +45,26 @@ class TradeEngineController(Controller):
         
     def add_in_stream(
             self, in_stream_name: str,
-            task, container,
             callback: Optional[Callable[Any, None]] = None
         ) -> None:
 
         if in_stream_name in self._channel.in_streams:
-            return
-        
+            raise ControllerInputError(
+                f"stream_name: {in_stream_name} is already in the channel."
+                )
+
         # Format Check
+        if len(in_stream_name.split(":")) !=2:
+            raise ControllerInputError("Incorrect format for stream_name input.")
+            
         sub_scope = in_stream_name.split(":")[0] 
         symbol_name = in_stream_name.split(":")[1]
 
         # See if pre-trade risk para is present
-        self._ptrc.
+        if not self._ptrc.has_symbol(symbol_name):
+            raise ControllerInputError(
+                f"symbol_name: {symbol_name} is not in pre-trade risk check."
+                )
         # Before adding, either ask for pre-trade risk parameters or load a preset
         try:
             # do trade subscription if scope is not present
@@ -76,22 +84,25 @@ class TradeEngineController(Controller):
                 callback(in_stream_name)
                 
         except (TradeSessionRequestError, TradeSessionTimeOutError) as e:
-            logger.error(str(e))
+            raise ControllerInputError(
+                f"Fail to perform a trade session request: {str(e)}."
+                )
 
-    def remove_in_stream(self, in_stream_name: str) -> None:
-        # unsub trade
+    def remove_in_stream(
+            self, 
+            in_stream_name: str,
+            callback: Optional[Callable[Any, None]] = None
+        ) -> None:
+        if in_stream_name not in self._channel.in_streams:
+            raise ControllerInputError(
+                f"stream_name: {in_stream_name} is not in the channel."
+                )
+        # Check if it can be legally removed.
         
-        # remove out_stream
-        task = self._tasks.pop(in_stream_name, None)
-        if task is not None:
-            task.cancel()
-            try:
-                await task          # await ONLY here — to let CancelledError settle
-            except asyncio.CancelledError:
-                pass
-        self.channel.in_streams.discard(in_stream_name)
-        self.channel.last_ids.pop(in_stream_name, None)   
         
+        if callback:
+            callback(in_stream_name)
+            
 
 class TradeEngineCQG:
     def __init__(
@@ -144,12 +155,23 @@ class TradeEngineCQG:
         await ExecutePayload(live_order=LiveOrderCQG(trade_session)).unload(PL)
         
         
-    def _add_send_task_to_map(self, in_stream_name: str):
+    def _add_send_task_to_map(self, in_stream_name: str) -> None:
         # For each new in_stream added, make a new async task send_loop
         self._send_order_tasks[in_stream_name] = asyncio.create_task(
             self._send_order_loop(in_stream_name)
             )
         
+    def _remove_task(self, in_stream_name: str) -> None:
+        task = self._tasks.pop(in_stream_name, None)
+        if task is not None:
+            task.cancel()
+            try:
+                await task          # await ONLY here — to let CancelledError settle
+            except asyncio.CancelledError:
+                pass
+        self.channel.in_streams.discard(in_stream_name)
+        self.channel.last_ids.pop(in_stream_name, None)   
+
     async def _send_order_loop(self, in_stream_name: str) -> None:
         while not self._stop_evt.is_set():
             # Continuous listening to the latest order instruction from redis stream
@@ -176,13 +198,16 @@ class TradeEngineCQG:
                             cmd[1], callback = self._add_send_task_to_map
                             )
                     case "REMOVE":
-                        self.controller.remove_in_stream(cmd[1])
+                        self.controller.remove_in_stream(
+                            cmd[1], callback = self._remove_task)
                     case _:
                         logger.warning("[Trade Engine] Unknown Command: %s", cmd[0])
+            except ControllerInputError as e:
+                logger.error("[Trade Engine] Control_loop error: %s", e)
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                logger.error("control_loop error: %s", e, exc_info=True)
+                logger.error("[Trade Engine] Control_loop error: %s", e, exc_info=True)
 
     # -------- Engine LifeCycle
     async def _setup(self):
