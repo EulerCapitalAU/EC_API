@@ -25,11 +25,10 @@ HOST_NAME, USR_NAME, PASSWORD, ACCOUNT_ID = 0, 0, 0, 0
 logger = logging.getLogger(__name__)
 
 # Controller class??
-from typing import Prototype, Optional, Callable, Any
+from typing import Protocol, Optional, Callable, Any
 
-ALLOWED_SUB_SCOPE = ["order_info"]
 
-class Controller(Prototype):...
+class Controller(Protocol):...
 
 class TradeEngineController(Controller):
     def __init__(
@@ -43,9 +42,9 @@ class TradeEngineController(Controller):
         self._ptrc = pretrade_risk_check
         self.SCOPE_MAP = {"order_info": SubScope.ORDERS}
         
-    def add_in_stream(
+    async def add_in_stream(
             self, in_stream_name: str,
-            callback: Optional[Callable[Any, None]] = None
+            callback: Optional[Callable[[Any], None]] = None
         ) -> None:
 
         if in_stream_name in self._channel.in_streams:
@@ -59,6 +58,10 @@ class TradeEngineController(Controller):
             
         sub_scope = in_stream_name.split(":")[0] 
         symbol_name = in_stream_name.split(":")[1]
+        
+        if not self.SCOPE_MAP.get(sub_scope):
+            raise ControllerInputError("{sub_scope} is an invalid sub_scope.")
+
 
         # See if pre-trade risk para is present
         if not self._ptrc.has_symbol(symbol_name):
@@ -68,13 +71,15 @@ class TradeEngineController(Controller):
         # Before adding, either ask for pre-trade risk parameters or load a preset
         try:
             # do trade subscription if scope is not present
-            if self.SCOPE_MAP.get(sub_scope) not in self._trade_session._active_trade_subs.values():
-                next_sub_id = list(self._trade_session._active_trade_subs.keys())[-1] + 1
-                self.trade_session.trade_subscription_request(next_sub_id, sub_scope)
+            match self.SCOPE_MAP[sub_scope]:
+                case SubScope.ORDERS:
+                    if not self._trade_session.has_orders_scope():
+                        next_sub_id = max(self._trade_session._active_trade_subs.keys(), default=0) + 1
+                        await self._trade_session.trade_subscription_request(next_sub_id, self.SCOPE_MAP[sub_scope])
             
             # Symbol Resolution
             if not self._trade_session.has_symbol(symbol_name):
-                self._trade_session.resolve_symbol(symbol_name)
+                await self._trade_session.resolve_symbol(symbol_name)
                 
             # Add in_stream, add symbols, 
             self._channel.in_streams.add(in_stream_name)
@@ -88,20 +93,24 @@ class TradeEngineController(Controller):
                 f"Fail to perform a trade session request: {str(e)}."
                 )
 
-    def remove_in_stream(
+    async def remove_in_stream(
             self, 
             in_stream_name: str,
-            callback: Optional[Callable[Any, None]] = None
-        ) -> None:
+            callback: Optional[Callable[[Any], Any]] = None
+        ) -> Any:
         if in_stream_name not in self._channel.in_streams:
             raise ControllerInputError(
                 f"stream_name: {in_stream_name} is not in the channel."
                 )
         # Check if it can be legally removed.
+        # !!! Add TTL lock on the strategy side, periodically renew it
+        # CHeck it here
         
         
         if callback:
-            callback(in_stream_name)
+            return callback(in_stream_name)
+        else:
+            return None
             
 
 class TradeEngineCQG:
@@ -135,24 +144,24 @@ class TradeEngineCQG:
         # ---- Engine Containers ----
         self._send_order_tasks: dict[str, asyncio.Task] = dict()
         
-        # ---- Channel ----
+        # ---- Channel and Control----
         self.CTRL_STREAM: str = "CMD:Trade_Engine"
-        
         self.controller: Controller = TradeEngineController(
-            self.trade_session, self.channel
+            self.trade_session, self.channel, self.PREC
             )
                     
     # ------- Engine functions (Trade)
     async def _package_and_send(
-        self, 
-        trade_session: TradeSessionCQG, 
-        order_type: RequestType, order_info: dict) -> None:
+            self, 
+            order_type: RequestType, 
+            order_info: dict
+        ) -> None:
         PL = Payload(
           order_request_type = order_type,
           order_info = order_info,
-          check_method = self.PREC # Static risk check done upon creation
+          risk_check = self.PREC # Static risk check done upon creation
           )
-        await ExecutePayload(live_order=LiveOrderCQG(trade_session)).unload(PL)
+        await ExecutePayload(live_order=LiveOrderCQG(self.trade_session)).unload(PL)
         
         
     def _add_send_task_to_map(self, in_stream_name: str) -> None:
@@ -161,16 +170,14 @@ class TradeEngineCQG:
             self._send_order_loop(in_stream_name)
             )
         
-    def _remove_task(self, in_stream_name: str) -> None:
-        task = self._tasks.pop(in_stream_name, None)
+    def _remove_task(self, in_stream_name: str) -> asyncio.Task:
+        task = self._send_order_tasks.pop(in_stream_name, None)
         if task is not None:
             task.cancel()
-            try:
-                await task          # await ONLY here — to let CancelledError settle
-            except asyncio.CancelledError:
-                pass
+
         self.channel.in_streams.discard(in_stream_name)
         self.channel.last_ids.pop(in_stream_name, None)   
+        return task
 
     async def _send_order_loop(self, in_stream_name: str) -> None:
         while not self._stop_evt.is_set():
@@ -191,15 +198,21 @@ class TradeEngineCQG:
             try:
                 # Listen to control command and add/remove in_stream
                 cmd = await self.channel.listen(stream_name=self.CTRL_STREAM, data_name="")
+                if cmd is None:
+                    continue
                 
                 match cmd[0]: # ("ADD", "order_info:WTI")
                     case "ADD":
-                        self.controller.add_in_stream(
+                        await self.controller.add_in_stream(
                             cmd[1], callback = self._add_send_task_to_map
                             )
                     case "REMOVE":
-                        self.controller.remove_in_stream(
+                        task = await self.controller.remove_in_stream(
                             cmd[1], callback = self._remove_task)
+                        try:
+                            await task          # await ONLY here — to let CancelledError settle
+                        except asyncio.CancelledError:
+                            pass
                     case _:
                         logger.warning("[Trade Engine] Unknown Command: %s", cmd[0])
             except ControllerInputError as e:
@@ -213,12 +226,12 @@ class TradeEngineCQG:
     async def _setup(self):
         # Connect to channel
         try:
-            self.channel.connect()
+            await self.channel.connect()
         except ChannelMissingSettingError as e:
             logger.warning("[Trade Engine]: " + str(e))
             
         # start trade session
-        self.trade_session.start()
+        await self.trade_session.start()
         
         # start control loop
         
