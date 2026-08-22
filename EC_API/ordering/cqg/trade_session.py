@@ -143,6 +143,9 @@ class TradeSessionCQG:
     def has_positions_scope(self) -> bool:
         return any(SubScope.POSITIONS in scopes for scopes in self._active_trade_subs.values())
 
+    def has_symbol(self, symbol_name: str) -> bool:
+        return symbol_name in self._symbol_registry.active_symbols
+    
     # --- Getters
     def get_order_status(self, chain_order_id: str) -> OrderStatusTypeCQG | None:
         return self.latest_order_state_by_chain.get(chain_order_id)
