@@ -29,7 +29,7 @@ class PreTradeRiskCheck:
             self._aliases = para.get("aliases", {})
             self.symbol_limits = para.get("symbol_limits", {})
 
-            # make sure aliases can translate from realname to itself
+            # make sure aliases can translate from the real name to itself
             for sym in set(self._aliases.values()):
                 self._aliases[sym] = sym
 
@@ -92,7 +92,9 @@ class PreTradeRiskCheck:
                 elif key.endswith("_min"):
                     if order_value < val:
                         raise ValueError(f"{self.field_map[key]}={order_value} below min {val}")
-
+        
+    def has_symbol(self, symbol_name: str) -> bool:
+        return symbol_name in self._aliases.keys()
 
 class InSessionRiskCheck:
     def __init__(self): ...
