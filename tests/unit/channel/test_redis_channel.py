@@ -34,8 +34,8 @@ def test_redis_channel_load_tcp_valid() -> None:
     assert RC.host_name['URL'] == "redis://localhost:16379"
     assert RC.in_streams == {"mkt_data:cqg", "mkt_data:fix"}
     assert RC.out_streams == {"processed_data"}
-    assert list(RC.last_ids.keys()) == ["mkt_data:cqg", "mkt_data:fix"]
-    assert list(RC.last_ids.values()) == ["0", "0"]
+    assert set(RC.last_ids.keys()) == {"mkt_data:cqg", "mkt_data:fix"}
+    assert set(RC.last_ids.values()) == {"0"}
     
 def test_redis_channel_load_uds_valid() -> None:
     RC = RedisChannel()
@@ -43,8 +43,8 @@ def test_redis_channel_load_uds_valid() -> None:
     assert RC.host_name['URL'] == "unix:///tmp/redis.sock"
     assert RC.in_streams == {"mkt_data:cqg", "mkt_data:fix"}
     assert RC.out_streams == {"processed_data"}
-    assert list(RC.last_ids.keys()) == ["mkt_data:cqg", "mkt_data:fix"]
-    assert list(RC.last_ids.values()) == ["0", "0"]
+    assert set(RC.last_ids.keys()) == {"mkt_data:cqg", "mkt_data:fix"}
+    assert set(RC.last_ids.values()) == {"0"}
     
 BAD_CONFIGS = [
     # (toml_bytes, expected_exception)
