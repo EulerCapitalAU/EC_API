@@ -20,7 +20,8 @@ from EC_API.exceptions import (
     TradeSessionRequestError,
     TradeSessionTimeOutError,
     RecorderCriticalError,
-    ControllerInputError
+    ControllerInputError,
+    RiskViolationError
     )
 from tests.integration.fixtures.engine_enums import (
     EngineState, ENGINESTATE_LIFECYCLE
@@ -44,6 +45,23 @@ class TradeEngineController(Controller):
         self._ptrc = pretrade_risk_check
         self.SCOPE_MAP = {"order_info": SubScope.ORDERS}
         
+    async def _subscribe_and_resolve(self, sub_scope: str, symbol_name: str) -> None:
+        try:
+            match self.SCOPE_MAP[sub_scope]:
+                case SubScope.ORDERS:
+                    if not self._trade_session.has_orders_scope():
+                        next_sub_id = max(self._trade_session._active_trade_subs.keys(), default=0) + 1
+                        await self._trade_session.trade_subscription_request(next_sub_id, self.SCOPE_MAP[sub_scope])
+
+            if not self._trade_session.has_symbol(symbol_name):
+                await self._trade_session.resolve_symbol(symbol_name)
+
+        except (TradeSessionRequestError, TradeSessionTimeOutError) as e:
+            raise ControllerInputError(
+                f"Fail to perform a trade session request: {str(e)}."
+                )
+            
+            
     async def add_in_stream(
             self, in_stream_name: str,
             callback: Optional[Callable[[Any], None]] = None
@@ -62,7 +80,7 @@ class TradeEngineController(Controller):
         symbol_name = in_stream_name.split(":")[1]
         
         if not self.SCOPE_MAP.get(sub_scope):
-            raise ControllerInputError("{sub_scope} is an invalid sub_scope.")
+            raise ControllerInputError(f"{sub_scope} is an invalid sub_scope.")
 
 
         # See if pre-trade risk para is present
@@ -70,30 +88,14 @@ class TradeEngineController(Controller):
             raise ControllerInputError(
                 f"symbol_name: {symbol_name} is not in pre-trade risk check."
                 )
-        # Before adding, either ask for pre-trade risk parameters or load a preset
-        try:
-            # do trade subscription if scope is not present
-            match self.SCOPE_MAP[sub_scope]:
-                case SubScope.ORDERS:
-                    if not self._trade_session.has_orders_scope():
-                        next_sub_id = max(self._trade_session._active_trade_subs.keys(), default=0) + 1
-                        await self._trade_session.trade_subscription_request(next_sub_id, self.SCOPE_MAP[sub_scope])
             
-            # Symbol Resolution
-            if not self._trade_session.has_symbol(symbol_name):
-                await self._trade_session.resolve_symbol(symbol_name)
-                
-            # Add in_stream, add symbols, 
-            self._channel.in_streams.add(in_stream_name)
-                    
-            if callback:
-                # For each new in_stream added, make a new async task send_loop
-                callback(in_stream_name)
-                
-        except (TradeSessionRequestError, TradeSessionTimeOutError) as e:
-            raise ControllerInputError(
-                f"Fail to perform a trade session request: {str(e)}."
-                )
+        await self._subscribe_and_resolve(sub_scope, symbol_name)
+
+        # Add in_stream, add symbols
+        self._channel.in_streams.add(in_stream_name)
+        
+        if callback:
+            callback(in_stream_name)
 
     async def remove_in_stream(
             self, 
@@ -105,19 +107,19 @@ class TradeEngineController(Controller):
                 f"stream_name: {in_stream_name} is not in the channel."
                 )
             
-            # Format Check
-            if len(in_stream_name.split(":")) !=2:
-                raise ControllerInputError("Incorrect format for stream_name input.")
-                
-            sub_scope = in_stream_name.split(":")[0] 
-            symbol_name = in_stream_name.split(":")[1]
+        # Format Check
+        if len(in_stream_name.split(":")) !=2:
+            raise ControllerInputError("Incorrect format for stream_name input.")
+            
+        sub_scope = in_stream_name.split(":")[0] 
+        symbol_name = in_stream_name.split(":")[1]
 
         # Check if it can be legally removed.
         # !!! Add TTL lock on the strategy side, periodically renew it
         # CHeck it here
         
         try:
-            self._trade_session.unsubscribe_symbol(symbol_name)
+            await self._trade_session.unsubscribe_symbol(symbol_name)
         except TradeSessionRequestError as e:
             raise ControllerInputError(str(e))
             
@@ -125,6 +127,32 @@ class TradeEngineController(Controller):
             return callback(in_stream_name)
         else:
             return
+        
+    async def bootstrap_in_stream(
+            self, in_stream_name: str,
+            callback: Optional[Callable[[Any], None]] = None
+        ) -> None:
+        # Re-subscribe an in_stream that's already registered on the channel
+        # (e.g. reloaded from config on restart) — skips the channel-membership
+        # check and re-registration that add_in_stream does.
+        if len(in_stream_name.split(":")) != 2:
+            raise ControllerInputError("Incorrect format for stream_name input.")
+
+        sub_scope = in_stream_name.split(":")[0]
+        symbol_name = in_stream_name.split(":")[1]
+
+        if not self.SCOPE_MAP.get(sub_scope):
+            raise ControllerInputError(f"{sub_scope} is an invalid sub_scope.")
+
+        if not self._ptrc.has_symbol(symbol_name):
+            raise ControllerInputError(
+                f"symbol_name: {symbol_name} is not in pre-trade risk check."
+                )
+
+        await self._subscribe_and_resolve(sub_scope, symbol_name)
+
+        if callback:
+            callback(in_stream_name)
             
 
 class TradeEngineCQG:
@@ -162,7 +190,7 @@ class TradeEngineCQG:
         self.controller: Controller = TradeEngineController(
             self.trade_session, self.channel, self.PREC
             )
-        
+        self._control_task: Optional[asyncio.Task] = None
         # ---- State Control ----
         self._state_mgr = StateMgr(
             ENGINESTATE_LIFECYCLE,
@@ -214,7 +242,10 @@ class TradeEngineCQG:
                 continue
             # package and send (fire and forget)
             order_type, order_info = msg
-            await self._package_and_send(order_type, order_info)
+            try:
+                await self._package_and_send(order_type, order_info)
+            except RiskViolationError as e:
+                logger.error("[Trade Engine] %s", e)
             
     # ------- Controls
     async def _control_loop(self):
@@ -266,7 +297,9 @@ class TradeEngineCQG:
             
             # subscribe all the trade subscriptions and pre-resolve symbols
             for stream_name in self.channel.in_streams:
-                await self.controller.add_in_stream(stream_name)   
+                await self.controller.bootstrap_in_stream(
+                    stream_name, callback=self._add_send_task_to_map
+                    )
             return True
         
         except (ChannelMissingSettingError, 
@@ -274,20 +307,33 @@ class TradeEngineCQG:
             logger.warning("[Trade Engine]: %s", e)
             return False
                 
+    async def start(self):
         setup_is_done = await self._setup()
         if setup_is_done:
             self._state_mgr.transition_to(EngineState.RUNNING)
         
 
     async def stop(self):
+        if self._stop_evt.is_set():
+            return 
+        self._stop_evt.set()
+
         try:
-            for stream_name in self.channel.in_streams:
-                await self.controller.remove_in_stream(stream_name)   
+            for stream_name in list(self.channel.in_streams):
+                await self.controller.remove_in_stream(
+                    stream_name, callback=self._remove_task
+                    )
+                
+            if self._control_task is not None:
+                self._control_task.cancel()
+                try:
+                    await self._control_task
+                except asyncio.CancelledError:
+                    pass
 
             is_stopped = await self.trade_session.stop()
             if not is_stopped:
                 logger.error("[Trade Engine] Trade Session is not stopped.")
-                return
             
             await self.recorder.stop()
             
@@ -299,6 +345,8 @@ class TradeEngineCQG:
                 RecorderCriticalError) as e:
             logger.warning("[Trade Engine]: %s", e)
         
+    def request_stop(self) -> None:
+        self._stop_evt.set()
                 
     async def run(self):
         await self.start()
