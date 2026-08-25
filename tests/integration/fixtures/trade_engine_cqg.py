@@ -273,18 +273,22 @@ class TradeEngineCQG:
                         logger.warning("[Trade Engine] Unknown Command: %s", cmd[0])
             except ControllerInputError as e:
                 logger.error("[Trade Engine] Control_loop error: %s", e)
+            except(ChannelMissingSettingError, ChannelListenError) as e:
+                logger.error("[Trade Engine] %s")
+            
             except asyncio.CancelledError:
                 raise
             except Exception as e:
                 logger.error("[Trade Engine] Control_loop error: %s", e, exc_info=True)
 
+    # Add Pause button and state backup for resume
+    def _freeze(self):...
+    def _unfreeze(self):...
+
     # -------- Engine LifeCycle
     async def _setup(self) -> bool:
         try: # Connect to channel
             await self.channel.connect()
-            
-            # start recorder
-            await self.recorder.start()
             
             # start control loop
             self._control_task = asyncio.create_task(self._control_loop())
@@ -334,8 +338,6 @@ class TradeEngineCQG:
             is_stopped = await self.trade_session.stop()
             if not is_stopped:
                 logger.error("[Trade Engine] Trade Session is not stopped.")
-            
-            await self.recorder.stop()
             
             await self.channel.disconnect()
             

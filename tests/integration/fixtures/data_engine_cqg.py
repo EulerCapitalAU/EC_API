@@ -17,6 +17,9 @@ from EC_API.monitor.base import Monitor
 from EC_API.monitor.cqg.realtime_data import MonitorDataCQG
 
 from EC_API.utility.state_mgr import StateMgr
+from EC_API.exceptions import (
+    ChannelBroadcastError
+    )
 from tests.integration.fixtures.engine_enums import (
     EngineState, ENGINESTATE_LIFECYCLE
     )
@@ -72,12 +75,27 @@ class DataEngineCQG:
         return self._state_mgr.cur
                     
     # ------- Engine functions (Monitor)
-    def _add_new_data_stream_task(self):...
+    async def stream_and_post(
+        self, out_stream_name: str, symbol_name: str, level
+        ) -> None:
+        async for parsed_msg in self.monitor.stream(symbol_name, level):
+            if self._stop_evt.is_set():
+                break
+            try:
+                await self.channel.broadcast(parsed_msg, out_stream_name)
+            except ChannelBroadcastError:
+                pass
+
+    def _add_new_data_stream_task(self, out_stream_name: str) -> None:
+        self._streaming_tasks[out_stream_name] = asyncio.create_task(
+            self.stream_and_post(out_stream_name)
+        )
     def _remove_data_stream_task(self):...
     
     
     # ------- Controls
     def _control_loop(self):...
+        
     # -------- Engine LifeCycle
     def request_stop(self) -> None:
         self._stop_evt.set()
