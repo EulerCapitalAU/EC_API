@@ -184,9 +184,11 @@ class TradeSessionCQG:
 
                         for p_ord_sts in parsed_ord_sts:
                             # update cl_order_id for order changes
-                            if p_ord_sts.get("order", {}).get("cl_order_id"):
-                                chain_order_id = self.cl_to_chain[p_ord_sts["order"]["cl_order_id"]]
-
+                            #if p_ord_sts.get("order", {}).get("cl_order_id"):
+                            #    chain_order_id = self.cl_to_chain[p_ord_sts["order"]["cl_order_id"]]
+                            cl_order_id = p_ord_sts.get("order", {}).get("cl_order_id")
+                            if cl_order_id:
+                                self.cl_to_chain[cl_order_id] = chain_order_id
                             self.latest_order_state_by_chain[chain_order_id] = p_ord_sts
                             self.active_order_ids_by_chain[chain_order_id] = (
                                 p_ord_sts["order_id"],

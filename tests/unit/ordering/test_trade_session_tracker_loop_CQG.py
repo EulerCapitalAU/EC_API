@@ -23,7 +23,8 @@ from tests.unit.fixtures.proxy_clients import FakeTransport, FakeCQGClient
 from tests.unit.fixtures.server_msg_builders_CQG import (
     build_order_statuses_server_msg,
     build_position_statuses_server_msg,
-    build_account_summary_statuses_server_msg
+    build_account_summary_statuses_server_msg,
+    build_order_server_msg
     )
 def assert_TS_init(ts: TradeSessionCQG):
     assert isinstance(ts._active_trade_subs, dict)
@@ -153,7 +154,7 @@ async def test_order_status_updates_one_chain_order_id_lifecycle_valid() -> None
             sub_ids = [CQG_TS.SubscriptionScope.SUBSCRIPTION_SCOPE_ORDERS],
             order_id = "order_id_4",
             chain_order_id = "chain_order_id_1",
-            order = None,
+            order = build_order_server_msg(cl_order_id="new_cl_order_id"),
             account_id = conn._account_id
             )
         await fake_transport.in_q.put(response_4)
@@ -166,6 +167,9 @@ async def test_order_status_updates_one_chain_order_id_lifecycle_valid() -> None
         # ID no longer in active queue and router
         assert TS._active_order_q.get("chain_order_id_1") is None
         assert TS._exec_stream_router._subs.get("chain_order_id_1") is None
+        
+        # check that the latest cl_order_id is updated
+        assert TS.cl_to_chain["new_cl_order_id"] == "chain_order_id_1"
         
 @pytest.mark.asyncio
 async def test_position_status_updates_one_contract_id_lifecycle_valid() -> None:

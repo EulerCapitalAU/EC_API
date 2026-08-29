@@ -284,6 +284,31 @@ def build_trade_snapshot_completions_server_msg(
     sub_scope.append(TrsSub.SubscriptionScope.SUBSCRIPTION_SCOPE_ACCOUNT_SUMMARY)
     return server_msg
 
+def build_order_server_msg(
+        cl_order_id: str = "cl_order_id_1",
+        account_id: int = 123466,
+        contract_id: int = 0,
+        side: int = Ord.Side.SIDE_BUY,
+        order_type: int = Ord.OrderType.ORDER_TYPE_LMT,
+        duration: int = Ord.Duration.DURATION_GTC,
+        qty: int = 2,
+        scaled_limit_price: int = 150,
+        is_manual: bool = False,
+    ) -> Ord: #utility function to build Order, not called directly to make server_msg
+    order = Ord()
+    order.account_id = account_id
+    order.contract_id = contract_id
+    order.cl_order_id = cl_order_id
+    order.side = side
+    order.order_type = order_type
+    order.duration = duration
+    order.qty.significand = qty
+    order.qty.exponent = 0
+    order.scaled_limit_price = scaled_limit_price
+    order.is_manual = is_manual
+    order.when_utc_timestamp.FromDatetime(datetime.now())
+    return order
+
 def build_order_statuses_server_msg(
         server_msg: ServerMsg,
         res: OrderStatus.Status = OrderStatus.Status.IN_TRANSIT,
