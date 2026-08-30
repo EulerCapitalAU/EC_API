@@ -776,3 +776,58 @@ async def test_position_status_cleanup_empty_open_position_valid() -> None:
         
         assert TS._active_pos_q.get(0) is None
         assert TS._pos_status_stream_router._subs.get(0) is None
+        
+@pytest.mark.asyncio
+async def test_order_status_unmapped_status_does_not_crash_tracker_loop() -> None:
+    # --- Setup ---
+    fake_transport = FakeTransport()
+    conn = ConnectCQG(
+        "host_name",
+        "user_name",
+        "password",
+        account_id=10000,
+        immediate_connect=False,
+        client=FakeCQGClient(),
+        transport=fake_transport
+        )
+    conn._timeout = 0.0001
+
+    async with TradeSessionCQG(conn) as TS:
+        TS._active_trade_subs[1] = [SubScope.ORDERS]
+
+        q = TS._exec_stream_router.subscribe("chain_order_id_1")
+        TS._active_order_q["chain_order_id_1"] = q
+
+        # Stage 1: unmapped status enum -> parse_order_statuses raises MsgParserError,
+        # caught by _tracker_loop's blanket except. Loop/task must survive.
+        bad_response = build_order_statuses_server_msg(
+            ServerMsg(),
+            res=9999,  # not in OrderStatus_MAP_CQG2INT
+            contract_id=0,
+            sub_ids=[CQG_TS.SubscriptionScope.SUBSCRIPTION_SCOPE_ORDERS],
+            order_id="order_id_bad",
+            chain_order_id="chain_order_id_1",
+            order=None,
+            account_id=conn._account_id
+            )
+        await fake_transport.in_q.put(bad_response)
+        await asyncio.sleep(0.001)
+
+        assert not TS._tracker_task.done()  # task survived the bad message
+        assert TS.latest_order_state_by_chain.get("chain_order_id_1") is None  # cycle aborted, nothing landed
+
+        # Stage 2: a valid message on the next event should still process normally
+        good_response = build_order_statuses_server_msg(
+            ServerMsg(),
+            res=OrderStatus.Status.WORKING,
+            contract_id=0,
+            sub_ids=[CQG_TS.SubscriptionScope.SUBSCRIPTION_SCOPE_ORDERS],
+            order_id="order_id_good",
+            chain_order_id="chain_order_id_1",
+            order=None,
+            account_id=conn._account_id
+            )
+        await fake_transport.in_q.put(good_response)
+        await asyncio.sleep(0.001)
+
+        assert TS.latest_order_state_by_chain["chain_order_id_1"]["order_id"] == "order_id_good"
