@@ -11,10 +11,13 @@ import queue
 from EC_API.ext.WebAPI.webapi_2_pb2 import ServerMsg, ClientMsg
 from EC_API.ext.WebAPI.market_data_2_pb2 import MarketDataSubscription as MktDSub
 from EC_API.ext.common.shared_1_pb2 import OrderStatus
+from EC_API.ext.WebAPI.user_session_2_pb2 import LogonResult as LgRes
+from EC_API.ext.WebAPI.user_session_2_pb2 import RestoreOrJoinSessionResult as RstJoinSessRes
 from EC_API.ext.WebAPI.user_session_2_pb2 import LoggedOff as LOff
 from EC_API.ext.WebAPI.webapi_2_pb2 import InformationReport as InfoRp
 from EC_API.connect.cqg.base import ConnectCQG
 from tests.unit.fixtures.server_msg_builders_CQG import (
+    build_logon_result_server_msg,
     build_logged_off_server_msg,
     build_symbol_resolution_report_server_msg,
     build_market_data_subscription_statuses_server_msg,
@@ -91,9 +94,16 @@ class FakeDataServerCQG:
     async def _logon_response(self, client_msg: ClientMsg) -> None:
         if self.success_decisions.get("logon") is not None:
             if self.success_decisions['logon']:
-                ...
+                server_msg = build_logon_result_server_msg(
+                    ServerMsg(),
+                    res_code = LgRes.ResultCode.RESULT_CODE_SUCCESS
+                    )
             elif not self.success_decisions['logon']:
-                ...
+                server_msg = build_logon_result_server_msg(
+                    ServerMsg(),
+                    res_code = LgRes.ResultCode.RESULT_CODE_FAILURE
+                    )
+            await self.transport.in_q.put(server_msg)
         
     async def _restore_response(self, client_msg: ClientMsg) -> None:
         ...
