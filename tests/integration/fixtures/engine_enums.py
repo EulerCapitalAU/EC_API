@@ -15,14 +15,18 @@ class EngineState(Enum):
     
 ENGINESTATE_LIFECYCLE = {
     EngineState.READY: [
+        EngineState.READY,
+        EngineState.FROZEN, 
         EngineState.RUNNING,
         EngineState.TERMINATED
         ],
     EngineState.RUNNING: [
+        EngineState.RUNNING,
         EngineState.FROZEN, 
         EngineState.TERMINATED
         ],
     EngineState.FROZEN: [
+        EngineState.FROZEN,
         EngineState.RUNNING,
         EngineState.TERMINATED
         ],
