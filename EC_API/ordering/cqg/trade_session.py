@@ -33,6 +33,7 @@ from EC_API.exceptions import (
     ConnectTimeOutError,
     SymbolResolutionError,
     TransportConnectError,
+    RecorderCriticalError
 )
 from EC_API._typing import (
     OrderStatusTypeCQG,
@@ -327,7 +328,7 @@ class TradeSessionCQG:
 
             if parsed_sub_status and parsed_sub_status[0].get("status_code") == TRADE_SUB_SUCCESS:
                 self._active_trade_subs[sub_id].remove(sub_scope)
-
+                del self._active_trade_subs[sub_id]
             return parsed_sub_status
 
     async def request_historical_orders(
@@ -356,14 +357,23 @@ class TradeSessionCQG:
         start_success = self._conn.start()
         
         if not start_success:
-            await self._recorder.stop()
+            try:
+                await self._recorder.stop()
+            except RecorderCriticalError as e:
+                logger.error(str(e))
             return False
-            
+
         self._tracker_task = asyncio.create_task(self._tracker_loop())
         if start_success:
-            await self._recorder.start()
-            self._started = True
-        return start_success
+            try:
+                await self._recorder.start()
+            except RecorderCriticalError as e:
+                logger.error(str(e))
+                self._tracker_task.cancel()   
+                return False
+        self._started = True
+
+        return True
 
     async def stop(self) -> bool:
         if (not self._started) or (self._stopped):
@@ -376,14 +386,24 @@ class TradeSessionCQG:
                 await self._tracker_task
             except asyncio.CancelledError:
                 pass
-        try:    
+            
+        recorder_done = True
+        try:
+            await self._recorder.stop()
+        except RecorderCriticalError as e:
+            logger.error(str(e))
+            recorder_done = False
+        
+        try:
             await self._cleanup()
         finally:
             stop_success = await self._conn.stop()
-            await self._recorder.stop()
             self._stopped, self._started = True, False
-            
-        return stop_success
+        
+        if stop_success and recorder_done:
+            return True
+        return False
+        
 
     async def _cleanup(self) -> None:
         # Automatically unsubscirbe and destroy the queue copy of the
@@ -399,3 +419,4 @@ class TradeSessionCQG:
                 self._symbol_registry.remove_metadata(sym)
             except (SymbolNotInRegistryError, MetaDataMissingError, ConnectTimeOutError) as e:
                 logger.warning(str(e))
+                return
