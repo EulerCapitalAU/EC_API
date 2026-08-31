@@ -66,10 +66,14 @@ class DataEngineCQG:
         # ---- Sessions setting ----
         self.conn: Connect = ConnectCQG(HOST_NAME, USR_NAME, PASSWORD, ACCOUNT_ID)
         self.monitor: Monitor = MonitorDataCQG(self.conn)
-        
+        self.num_logon_trial: int = 10
+        self.num_logoff_trial: int = 10
+
         # ---- Engine property ----
         self._stop_evt: asyncio.Event = asyncio.Event()
-        
+        self._freeze_evt: asyncio.Event = asyncio.Event()
+        self._notify_evt: asyncio.Event = asyncio.Event() # to wake up the main loop
+
         # ---- Engine Containers ----
         self._streaming_tasks: dict[str, asyncio.Task] = dict()
         self._missed_ticks: dict[str, int] = dict()
@@ -79,6 +83,7 @@ class DataEngineCQG:
             self.monitor, self.channel,
             )
         self._control_task: Optional[asyncio.Task] = None
+        
         # ---- State Control ----
         self._state_mgr = StateMgr(
             ENGINESTATE_LIFECYCLE,
@@ -114,10 +119,6 @@ class DataEngineCQG:
     # ------- Controls
     def _control_loop(self):...
         
-    # -------- Engine LifeCycle
-    def request_stop(self) -> None:
-        self._stop_evt.set()
-
 
     # -------- Engine LifeCycle
     async def _setup(self) -> bool:
@@ -174,5 +175,91 @@ class DataEngineCQG:
             self._state_mgr.transition_to(EngineState.TERMINATED)
             return False
         return True
+    
+    async def stop(self) -> bool:
+        if self._stop_evt.is_set():
+            return False
+        self._stop_evt.set()
 
+        try: # logoff
+            for trial in range(self.num_logoff_trial):
+                logoff_res = await self.monitor._conn.logoff()
+                logger.info(
+                    f"[Data Engine]: Logoff attempt {trial} reason: {logoff_res.get('logoff_reason')}."
+                    )
+                if self.trade_session.state == ConnectionState.CONNECTED_LOGOFF:
+                    break
+                
+        except (ConnectRequestError, ConnectTimeOutError) as e:
+            logger.warning("[Data Engine]: %s", e)
+            return False
+
+        is_stopped = await self.monitor.stop()
+        if not is_stopped:
+            logger.error("[Data Engine] Trade Session is not stopped.")
+            return False
+
+        try: # stream cleanup
+            for stream_name in list(self.channel.in_streams):
+                await self.controller.remove_in_stream(
+                    stream_name, callback=self._remove_task,
+                    auto_unsub = False
+                    )
+        except ControllerInputError as e:
+            logger.warning("[Data Engine]: %s", e)
+            return False
+
+        # End control loop
+        if self._control_task is not None:
+            self._control_task.cancel()
+            try:
+                await self._control_task
+            except asyncio.CancelledError:
+                pass
+            
+        try:
+            await self.channel.disconnect()
+        except ChannelMissingSettingError as e:
+            logger.warning("[Data Engine]: %s", e)
+            return False
+
+        self._state_mgr.transition_to(EngineState.TERMINATED)
+        return True
+    
+    # --- Engine request methods ----
+    async def request_freeze(self) -> None:
+        self._freeze_evt.set()
+        self._notify_evt.set()
+
+
+    async def request_wake(self) -> None:
+        self._freeze_evt.clear()
+        self._notify_evt.set()
+        
+    async def request_stop(self) -> None:
+        self._stop_evt.set()  
+        self._notify_evt.set()
+
+    # --- main ---  
+    async def run(self) -> None:
+        try:
+            is_started = await self.start()
+            if not is_started:
+                logger.error("[Data Engine] Engine Start Fail.")
+                return
+            
+            # Main loop
+            while True:
+                await self._notify_evt.wait()
+                self._notify_evt.clear()
+                
+                if self._stop_evt.is_set():
+                    break
+                                    
+                if self._freeze_evt.is_set() and self.state is EngineState.RUNNING:
+                    await self._freeze()
+                elif not self._freeze_evt.is_set() and self.state is EngineState.FROZEN:
+                    await self._unfreeze()
+        finally:
+            await self.stop()
     

@@ -178,7 +178,7 @@ class TradeEngineCQG:
         self.recorder: Recorder = SQLiteRecorder(
             schema = SQLSchemaTable(
                 table_name = "test_trade_engine_audit", 
-                columns = (("", "", ""), ("", "", ""),)
+                columns = (("", "", ""), ("", "", ""),) #!!! fill this up
                 ), 
             db_address = ""
             )
@@ -196,6 +196,7 @@ class TradeEngineCQG:
         # ---- Engine property ----
         self._stop_evt: asyncio.Event = asyncio.Event()
         self._freeze_evt: asyncio.Event = asyncio.Event()
+        self._notify_evt: asyncio.Event = asyncio.Event() # to wake up the main loop
         
         # ---- Engine Containers ----
         self._send_order_tasks: dict[str, asyncio.Task] = dict()
@@ -206,6 +207,7 @@ class TradeEngineCQG:
             self.trade_session, self.channel, self.PREC
             )
         self._control_task: Optional[asyncio.Task] = None
+        
         # ---- State Control ----
         self._state_mgr = StateMgr(
             ENGINESTATE_LIFECYCLE,
@@ -248,11 +250,14 @@ class TradeEngineCQG:
     async def _send_order_loop(self, in_stream_name: str) -> None:
         while not self._stop_evt.is_set():
             # Continuous listening to the latest order instruction from redis stream
-            msg = await self.channel.listen(in_stream_name) 
-            
+            msg = await self.channel.listen(in_stream_name)             
             # If there is something, an event is triggered
             if msg is None:
                 continue
+            
+            if self.state is not EngineState.RUNNING:
+                continue
+            
             # package and send (fire and forget)
             order_type, order_info = msg
             try:
@@ -270,7 +275,7 @@ class TradeEngineCQG:
                 if cmd is None:
                     continue
                 
-                match cmd[0]: # ("ADD", "order_info:WTI")
+                match cmd[0]: # ("CMD:add_stream", "order_info:WTI")
                     case "CMD:add_stream":
                         await self.controller.add_in_stream(
                             cmd[1], callback = self._add_send_task_to_map
@@ -282,12 +287,16 @@ class TradeEngineCQG:
                             await task          # await ONLY here — to let CancelledError settle
                         except asyncio.CancelledError:
                             pass
-                    #!!! Freeze Engine
-                    #!!! Unfreeze Engine
-                    #!!! Cancel_All_request
-                    #!!! goflat_request
-                    # start engine
-                    # shutdown engine
+                    case "CMD:freeze_engine":
+                        await self.request_freeze()
+                    case "CMD:unfreeze_engine":
+                        await self.request_wake()
+                    case "CMD:shutdown_engine":
+                        await self.request_stop()
+                    #!!!case "CMD:cancel_all_request":
+                    #    await self._package_and_send()
+                    #!!!case "CMD:goflat_request":
+                    #    await self._package_and_send()
                     case _:
                         logger.warning("[Trade Engine] Unknown Command: %s", cmd[0])
             except ControllerInputError as e:
@@ -300,10 +309,16 @@ class TradeEngineCQG:
             except Exception as e:
                 logger.error("[Trade Engine] Control_loop error: %s", e, exc_info=True)
 
-    # Add Pause button and state backup for resume
-    def _freeze(self):...
-    def _unfreeze(self):...
-
+    async def _freeze(self) -> None:
+        # During a freeze. order_info can come in but will be discarded so there
+        # is no exection        
+        self._state_mgr.transition_to(EngineState.FROZEN)
+        return
+        
+    async def _unfreeze(self) -> None:
+        self._state_mgr.transition_to(EngineState.RUNNING)
+        return 
+    
     # -------- Engine LifeCycle
     async def _setup(self) -> bool:
         try: # Connect to channel
@@ -364,7 +379,7 @@ class TradeEngineCQG:
 
     async def stop(self) -> bool:
         if self._stop_evt.is_set():
-            return 
+            return False
         self._stop_evt.set()
 
         try: # logoff
@@ -415,23 +430,37 @@ class TradeEngineCQG:
     # --- Engine request methods ----
     async def request_freeze(self) -> None:
         self._freeze_evt.set()
-        
-    async def request_unfreeze(self) -> None:
-        self._freeze_evt.set()
+        self._notify_evt.set()
+
+
+    async def request_wake(self) -> None:
+        self._freeze_evt.clear()
+        self._notify_evt.set()
         
     async def request_stop(self) -> None:
-        await self.stop()  
-        
+        self._stop_evt.set()  
+        self._notify_evt.set()
+
     # --- main ---  
-    async def run(self):
+    async def run(self) -> None:
         try:
             is_started = await self.start()
-            
             if not is_started:
                 logger.error("[Trade Engine] Engine Start Fail.")
                 return
-
-            await self._stop_evt.wait()
             
+            # Main loop
+            while True:
+                await self._notify_evt.wait()
+                self._notify_evt.clear()
+                
+                if self._stop_evt.is_set():
+                    break
+                                    
+                if self._freeze_evt.is_set() and self.state is EngineState.RUNNING:
+                    await self._freeze()
+                elif not self._freeze_evt.is_set() and self.state is EngineState.FROZEN:
+                    await self._unfreeze()
         finally:
             await self.stop()
+             
