@@ -21,6 +21,7 @@ from EC_API.monitor.enums import MktDataSubLevel
 from EC_API.utility.state_mgr import StateMgr
 from EC_API.exceptions import (
     ChannelBroadcastError,
+    ChannelListenError,
     ControllerInputError,
     ChannelMissingSettingError,
     ConnectRequestError, 
@@ -45,18 +46,37 @@ class DataEngineController(Controller):
         self._monitor = monitor
         self._channel = channel
         self.SCOPE_MAP = {"trade": MktDataSubLevel.LEVEL_TRADES}
-
-    async def add_in_stream(
-            self, in_stream_name: str,
+            
+    async def add_out_stream(
+            self, out_stream_name: str,
             callback: Optional[Callable[[Any], None]] = None
-        ) -> None:...
-    
-    async def remove_in_stream(
+        ) -> None:
+        if out_stream_name in self._channel.out_streams:
+            raise ControllerInputError(
+                f"stream_name: {out_stream_name} is already in the channel."
+                )
+
+        # Format Check
+        if len(out_stream_name.split(":")) !=2:
+            raise ControllerInputError("Incorrect format for stream_name input.")
+            
+        sub_scope = out_stream_name.split(":")[0] 
+        symbol_name = out_stream_name.split(":")[1]
+        
+        # Add in_stream, add symbols
+        self._channel.in_streams.add(out_stream_name)
+
+        if callback:
+            callback(out_stream_name)
+
+
+    async def remove_out_stream(
             self, 
-            in_stream_name: str,
+            out_stream_name: str,
             callback: Optional[Callable[[Any], Any]] = None
         ) -> Optional[Any]:...
-    async def bootstrap_in_stream():...
+    
+    async def bootstrap_out_stream(self):...
     
 class DataEngineCQG:
     def __init__(self, channel_cfg_addr: str):
@@ -79,6 +99,7 @@ class DataEngineCQG:
         self._missed_ticks: dict[str, int] = dict()
         
         # ---- Channel and Control----
+        self.CTRL_STREAM: str = "CMD:Data_Engine"
         self.controller: Controller = DataEngineController(
             self.monitor, self.channel,
             )
@@ -110,15 +131,67 @@ class DataEngineCQG:
 
     def _add_new_data_stream_task(self, out_stream_name: str) -> None:
         self._streaming_tasks[out_stream_name] = asyncio.create_task(
-            self.stream_and_post(out_stream_name)
+            self._ingest_data_loop(out_stream_name)
         )
         
-    def _remove_data_stream_task(self):...
+    def _remove_data_stream_task(self, out_stream_name: str) -> None:
+        task = self._streaming_tasks.pop(out_stream_name, None)
+        if task is not None:
+            task.cancel()
+        return task
     
-    
+    async def _ingest_data_loop(self, out_stream_name: str):
+        while not self._stop_evt.is_set():
+            ...
+
     # ------- Controls
-    def _control_loop(self):...
+    async def _control_loop(self, out_stream_name: str):
+        while not self._stop_evt.is_set():
+            try:
+                # Listen to control command and add/remove out_stream
+                cmd = await self.channel.listen(stream_name=self.CTRL_STREAM, data_name="data")
+                if cmd is None:
+                    continue
+                
+                match cmd[0]: # ("CMD:add_stream", "mkt_data:WTI")
+                    case "CMD:add_stream":
+                        await self.controller.add_out_stream(
+                            cmd[1], callback = self._add_new_data_stream_task
+                            )
+                    case "CMD:remove_stream":
+                        task = await self.controller.remove_out_stream(
+                            cmd[1], callback = self._remove_data_stream_task)
+                        try:
+                            await task          # await ONLY here — to let CancelledError settle
+                        except asyncio.CancelledError:
+                            pass
+                    case "CMD:freeze_engine":
+                        await self.request_freeze()
+                    case "CMD:unfreeze_engine":
+                        await self.request_wake()
+                    case "CMD:shutdown_engine":
+                        await self.request_stop()
+                    case _:
+                        logger.warning("[Data Engine] Unknown Command: %s", cmd[0])
+            except ControllerInputError as e:
+                logger.error("[Data Engine] Control_loop error: %s", e)
+            except(ChannelMissingSettingError, ChannelListenError) as e:
+                logger.error("[Data Engine] %s", e)
+            
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error("[Data Engine] Control_loop error: %s", e, exc_info=True)
+
+    async def _freeze(self) -> None:
+        # During a freeze. order_info can come in but will be discarded so there
+        # is no exection        
+        self._state_mgr.transition_to(EngineState.FROZEN)
+        return
         
+    async def _unfreeze(self) -> None:
+        self._state_mgr.transition_to(EngineState.RUNNING)
+        return 
 
     # -------- Engine LifeCycle
     async def _setup(self) -> bool:
@@ -131,7 +204,7 @@ class DataEngineCQG:
             # start monitor
             monitor_start = await self.monitor.start()
             if not monitor_start:
-                logger.warning("[Data Engine]: Failed to launch Trade Session.")
+                logger.warning("[Data Engine]: Failed to launch Monitor.")
                 return False
             
             for trial in range(self.num_logon_trial):
@@ -165,9 +238,9 @@ class DataEngineCQG:
             return False
         
         try:
-            # subscribe all the trade subscriptions and pre-resolve symbols
-            for stream_name in self.channel.in_streams:
-                await self.controller.bootstrap_in_stream(
+            # subscribe all the monitors and pre-resolve symbols
+            for stream_name in self.channel.out_streams:
+                await self.controller.bootstrap_out_stream(
                     stream_name, callback=self._add_new_data_stream_task
                     )
         except ControllerInputError as e:
@@ -187,7 +260,7 @@ class DataEngineCQG:
                 logger.info(
                     f"[Data Engine]: Logoff attempt {trial} reason: {logoff_res.get('logoff_reason')}."
                     )
-                if self.trade_session.state == ConnectionState.CONNECTED_LOGOFF:
+                if self.monitor.state == ConnectionState.CONNECTED_LOGOFF:
                     break
                 
         except (ConnectRequestError, ConnectTimeOutError) as e:
@@ -196,13 +269,13 @@ class DataEngineCQG:
 
         is_stopped = await self.monitor.stop()
         if not is_stopped:
-            logger.error("[Data Engine] Trade Session is not stopped.")
+            logger.error("[Data Engine] Monitor is not stopped.")
             return False
 
         try: # stream cleanup
-            for stream_name in list(self.channel.in_streams):
-                await self.controller.remove_in_stream(
-                    stream_name, callback=self._remove_task,
+            for stream_name in list(self.channel.out_streams):
+                await self.controller.remove_out_stream(
+                    stream_name, callback=self._remove_data_stream_task,
                     auto_unsub = False
                     )
         except ControllerInputError as e:

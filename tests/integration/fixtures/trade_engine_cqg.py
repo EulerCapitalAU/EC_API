@@ -66,7 +66,6 @@ class TradeEngineController(Controller):
                 f"Fail to perform a trade session request: {str(e)}."
                 )
             
-            
     async def add_in_stream(
             self, in_stream_name: str,
             callback: Optional[Callable[[Any], None]] = None,
@@ -267,11 +266,10 @@ class TradeEngineCQG:
             
     # ------- Controls
     async def _control_loop(self):
-        # cmd: add_stream, remove_stream, start_engine, stop_engine
         while not self._stop_evt.is_set():
             try:
                 # Listen to control command and add/remove in_stream
-                cmd = await self.channel.listen(stream_name=self.CTRL_STREAM, data_name="")
+                cmd = await self.channel.listen(stream_name=self.CTRL_STREAM, data_name="data")
                 if cmd is None:
                     continue
                 
