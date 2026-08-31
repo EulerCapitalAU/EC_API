@@ -5,6 +5,7 @@ from typing import Protocol, Optional, Callable, Any
 from EC_API.channel.base import Channel
 from EC_API.channel.redis import RedisChannel
 from EC_API.connect.base import Connect
+from EC_API.connect.enums import ConnectionState
 from EC_API.connect.cqg.base import ConnectCQG
 from EC_API.ordering.trade_session import TradeSession
 from EC_API.ordering.cqg.trade_session import TradeSessionCQG
@@ -16,7 +17,10 @@ from EC_API.recorders.base import SQLSchemaTable, Recorder
 from EC_API.recorders.sqlite_recorder import SQLiteRecorder
 from EC_API.utility.state_mgr import StateMgr
 from EC_API.exceptions import (
+    ConnectRequestError,
+    ConnectTimeOutError,
     ChannelMissingSettingError, 
+    ChannelListenError,
     TradeSessionRequestError,
     TradeSessionTimeOutError,
     RecorderCriticalError,
@@ -28,6 +32,7 @@ from tests.integration.fixtures.engine_enums import (
     )
 
 HOST_NAME, USR_NAME, PASSWORD, ACCOUNT_ID = 0, 0, 0, 0
+PRIVATE_LABEL = 0
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +69,8 @@ class TradeEngineController(Controller):
             
     async def add_in_stream(
             self, in_stream_name: str,
-            callback: Optional[Callable[[Any], None]] = None
+            callback: Optional[Callable[[Any], None]] = None,
+            auto_sub: bool = True
         ) -> None:
 
         if in_stream_name in self._channel.in_streams:
@@ -88,19 +94,20 @@ class TradeEngineController(Controller):
             raise ControllerInputError(
                 f"symbol_name: {symbol_name} is not in pre-trade risk check."
                 )
+        if auto_sub:
+            await self._subscribe_and_resolve(sub_scope, symbol_name)
             
-        await self._subscribe_and_resolve(sub_scope, symbol_name)
-
         # Add in_stream, add symbols
         self._channel.in_streams.add(in_stream_name)
-        
+
         if callback:
             callback(in_stream_name)
 
     async def remove_in_stream(
             self, 
             in_stream_name: str,
-            callback: Optional[Callable[[Any], Any]] = None
+            callback: Optional[Callable[[Any], Any]] = None,
+            auto_unsub: bool = True
         ) -> Optional[Any]:
         if in_stream_name not in self._channel.in_streams:
             raise ControllerInputError(
@@ -118,10 +125,15 @@ class TradeEngineController(Controller):
         # !!! Add TTL lock on the strategy side, periodically renew it
         # CHeck it here
         
-        try:
-            await self._trade_session.unsubscribe_symbol(symbol_name)
-        except TradeSessionRequestError as e:
-            raise ControllerInputError(str(e))
+        if auto_unsub:
+            try:
+                await self._trade_session.unsubscribe_symbol(symbol_name)
+            except TradeSessionRequestError as e:
+                raise ControllerInputError(str(e))
+                
+        self.channel.in_streams.discard(in_stream_name)
+        self.channel.last_ids.pop(in_stream_name, None)   
+
             
         if callback:
             return callback(in_stream_name)
@@ -174,6 +186,8 @@ class TradeEngineCQG:
         # ---- Sessions setting ----
         self.conn: Connect = ConnectCQG(HOST_NAME, USR_NAME, PASSWORD, ACCOUNT_ID)
         self.trade_session: TradeSession = TradeSessionCQG(self.conn, recorder=self.recorder)
+        self.num_logon_trial: int = 10
+        self.num_logoff_trial: int = 10
         
         # ---- Risk checks ----
         self.PREC: PreTradeRiskCheck = PreTradeRiskCheck('cqg')
@@ -181,6 +195,7 @@ class TradeEngineCQG:
         
         # ---- Engine property ----
         self._stop_evt: asyncio.Event = asyncio.Event()
+        self._freeze_evt: asyncio.Event = asyncio.Event()
         
         # ---- Engine Containers ----
         self._send_order_tasks: dict[str, asyncio.Task] = dict()
@@ -222,14 +237,12 @@ class TradeEngineCQG:
         self._send_order_tasks[in_stream_name] = asyncio.create_task(
             self._send_order_loop(in_stream_name)
             )
-        
+
     def _remove_task(self, in_stream_name: str) -> asyncio.Task:
         task = self._send_order_tasks.pop(in_stream_name, None)
         if task is not None:
             task.cancel()
 
-        self.channel.in_streams.discard(in_stream_name)
-        self.channel.last_ids.pop(in_stream_name, None)   
         return task
 
     async def _send_order_loop(self, in_stream_name: str) -> None:
@@ -258,23 +271,29 @@ class TradeEngineCQG:
                     continue
                 
                 match cmd[0]: # ("ADD", "order_info:WTI")
-                    case "ADD":
+                    case "CMD:add_stream":
                         await self.controller.add_in_stream(
                             cmd[1], callback = self._add_send_task_to_map
                             )
-                    case "REMOVE":
+                    case "CMD:remove_stream":
                         task = await self.controller.remove_in_stream(
                             cmd[1], callback = self._remove_task)
                         try:
                             await task          # await ONLY here — to let CancelledError settle
                         except asyncio.CancelledError:
                             pass
+                    #!!! Freeze Engine
+                    #!!! Unfreeze Engine
+                    #!!! Cancel_All_request
+                    #!!! goflat_request
+                    # start engine
+                    # shutdown engine
                     case _:
                         logger.warning("[Trade Engine] Unknown Command: %s", cmd[0])
             except ControllerInputError as e:
                 logger.error("[Trade Engine] Control_loop error: %s", e)
             except(ChannelMissingSettingError, ChannelListenError) as e:
-                logger.error("[Trade Engine] %s")
+                logger.error("[Trade Engine] %s", e)
             
             except asyncio.CancelledError:
                 raise
@@ -299,60 +318,120 @@ class TradeEngineCQG:
                 logger.warning("[Trade Engine]: Failed to launch Trade Session.")
                 return False
             
+            for trial in range(self.num_logon_trial):
+                logon_res = await self.trade_session._conn.logon(
+                    client_app_id = "WebApiTest",
+                    client_version = "python-client-test-2-240",
+                    protocol_version_major = 2,
+                    protocol_version_minor = 240,
+                    drop_concurrent_session = False,
+                    private_label = PRIVATE_LABEL,
+                    )
+                logger.info(f"[Trade Engine]: Logon attempt {trial} result: {logon_res.get('result_code')}.")
+        
+                if self.trade_session.state == ConnectionState.CONNECTED_LOGON:
+                    return True
+            return False
+        except (ConnectRequestError, ConnectTimeOutError) as e:
+            logger.warning("[Trade Engine]: %s", e)
+            return False
+
+                
+    async def start(self) -> bool:
+        try:
+            setup_is_done = await self._setup()
+            if setup_is_done:
+                self._state_mgr.transition_to(EngineState.RUNNING)
+            else:
+                self._state_mgr.transition_to(EngineState.TERMINATED)
+                
+        except (ChannelMissingSettingError, 
+                RecorderCriticalError) as e:
+            logger.warning("[Trade Engine]: %s", e)
+            return False
+        
+        try:
             # subscribe all the trade subscriptions and pre-resolve symbols
             for stream_name in self.channel.in_streams:
                 await self.controller.bootstrap_in_stream(
                     stream_name, callback=self._add_send_task_to_map
                     )
-            return True
-        
-        except (ChannelMissingSettingError, 
-                RecorderCriticalError) as e:
-            logger.warning("[Trade Engine]: %s", e)
+        except ControllerInputError as e:
+            logger.error("[Trade Engine]: %s", e)
+            self._state_mgr.transition_to(EngineState.TERMINATED)
             return False
-                
-    async def start(self):
-        setup_is_done = await self._setup()
-        if setup_is_done:
-            self._state_mgr.transition_to(EngineState.RUNNING)
-        
+        return True
 
-    async def stop(self):
+    async def stop(self) -> bool:
         if self._stop_evt.is_set():
             return 
         self._stop_evt.set()
 
-        try:
+        try: # logoff
+            for trial in range(self.num_logoff_trial):
+                logoff_res = await self.trade_session._conn.logoff()
+                logger.info(
+                    f"[Trade Engine]: Logoff attempt {trial} reason: {logoff_res.get('logoff_reason')}."
+                    )
+                if self.trade_session.state == ConnectionState.CONNECTED_LOGOFF:
+                    break
+                
+        except (ConnectRequestError, ConnectTimeOutError) as e:
+            logger.warning("[Trade Engine]: %s", e)
+            return False
+
+        is_stopped = await self.trade_session.stop()
+        if not is_stopped:
+            logger.error("[Trade Engine] Trade Session is not stopped.")
+            return False
+
+        try: # stream cleanup
             for stream_name in list(self.channel.in_streams):
                 await self.controller.remove_in_stream(
-                    stream_name, callback=self._remove_task
+                    stream_name, callback=self._remove_task,
+                    auto_unsub = False
                     )
-                
-            if self._control_task is not None:
-                self._control_task.cancel()
-                try:
-                    await self._control_task
-                except asyncio.CancelledError:
-                    pass
-
-            is_stopped = await self.trade_session.stop()
-            if not is_stopped:
-                logger.error("[Trade Engine] Trade Session is not stopped.")
-            
-            await self.channel.disconnect()
-            
-            self._state_mgr.transition_to(EngineState.TERMINATED)
-
-        except (ChannelMissingSettingError, 
-                RecorderCriticalError) as e:
+        except ControllerInputError as e:
             logger.warning("[Trade Engine]: %s", e)
-        
-    def request_stop(self) -> None:
-        self._stop_evt.set()
-                
-    async def run(self):
-        await self.start()
+            return False
+
+        # End control loop
+        if self._control_task is not None:
+            self._control_task.cancel()
+            try:
+                await self._control_task
+            except asyncio.CancelledError:
+                pass
+            
         try:
+            await self.channel.disconnect()
+        except ChannelMissingSettingError as e:
+            logger.warning("[Trade Engine]: %s", e)
+            return False
+
+        self._state_mgr.transition_to(EngineState.TERMINATED)
+        return True
+        
+    # --- Engine request methods ----
+    async def request_freeze(self) -> None:
+        self._freeze_evt.set()
+        
+    async def request_unfreeze(self) -> None:
+        self._freeze_evt.set()
+        
+    async def request_stop(self) -> None:
+        await self.stop()  
+        
+    # --- main ---  
+    async def run(self):
+        try:
+            is_started = await self.start()
+            
+            if not is_started:
+                logger.error("[Trade Engine] Engine Start Fail.")
+                return
+
             await self._stop_evt.wait()
+            
         finally:
             await self.stop()
