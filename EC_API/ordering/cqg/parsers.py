@@ -130,6 +130,7 @@ def parse_position_statuses(msg: ServerMsg, in_detail: bool = False) -> list[dic
                 "account_id": ele.account_id,
                 "contract_id": ele.contract_id,
                 "is_short_open_position": ele.is_short_open_position,
+                "is_snapshot": ele.is_snapshot
             }
             if ele.open_positions:
                 poss = parse_open_position(ele)
