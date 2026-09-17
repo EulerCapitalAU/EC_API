@@ -94,8 +94,8 @@ def test_parse_order_statuses_server_msg_valid() -> None:
     assert res[0]['order']['contract_id'] == 10
     assert res[0]['order']['cl_order_id'] == 'cl_order_1'
     assert res[0]['order']['side'] == 2
-    assert res[0]['order']['qty']['significand'] == 111
-    assert res[0]['order']['qty']['exponent'] == 0
+    assert res[0]['order']['qty'] == 111
+    #assert res[0]['order']['qty']['exponent'] == 0
     
 def test_parse_position_statuses_server_msg_valid() -> None:
     msg = build_position_statuses_server_msg(ServerMsg())

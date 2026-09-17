@@ -88,6 +88,9 @@ def to_significand_sint64_exponent_sint32(n: int | float):
 
     return significand, exponent
 
+def significand_exponent_to_decimal(significand: int, exponent: int) -> Decimal:
+    # inverse of to_significand_sint64_exponent_sint32: value = significand * 10**exponent
+    return Decimal(significand).scaleb(exponent)
 
 def time_it(func: Callable) -> Callable:
     # simple timing function

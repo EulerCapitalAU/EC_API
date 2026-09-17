@@ -83,8 +83,8 @@ async def test_new_order_request_send_valid(conn) -> None:
     assert result[0]['order']['account_id'] == conn._account_id
     assert result[0]['order']['contract_id'] == 1
     assert result[0]['order']['cl_order_id'] == '1231314'
-    assert result[0]['order']['qty']['significand'] == 2
-    assert result[0]['order']['qty']['exponent'] == 0
+    assert result[0]['order']['qty'] == 2
+    #assert result[0]['order']['qty']['exponent'] == 0
     assert result[0]['order']['scaled_limit_price'] == 150
 
 @pytest.mark.asyncio

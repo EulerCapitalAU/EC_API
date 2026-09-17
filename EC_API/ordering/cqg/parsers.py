@@ -11,6 +11,7 @@ from google.protobuf.json_format import MessageToDict
 from EC_API.ordering.cqg.enum_mapping import OrderStatus_MAP_CQG2INT
 from EC_API.ext.WebAPI.webapi_2_pb2 import ServerMsg
 from EC_API.ext.WebAPI.trade_routing_2_pb2 import PositionStatus
+from EC_API.utility.base import significand_exponent_to_decimal
 from EC_API.exceptions import MsgParserError
 from EC_API._typing import Parser_func
 
@@ -99,10 +100,12 @@ def parse_order_statuses(msg: ServerMsg, in_detail: bool = False) -> list[dict[s
                     "order_type": ele.order.order_type,
                     "duration": ele.order.duration,
                     "side": ele.order.side,
-                    "qty": {
-                        "significand": ele.order.qty.significand,
-                        "exponent": ele.order.qty.exponent,
-                    },
+                    "qty": significand_exponent_to_decimal(
+                        ele.order.qty.significand, ele.order.qty.exponent
+                        ),
+                        #{
+                        #"significand": ele.order.qty.significand,
+                        #"exponent": ele.order.qty.exponent},
                     "scaled_limit_price": ele.order.scaled_limit_price,
                     "scaled_stop_price": ele.order.scaled_stop_price,
                 }
@@ -161,7 +164,7 @@ def parse_open_position(msg: PositionStatus) -> list:  # special helper for fast
                 "statement_date": pos.statement_date,
                 "is_aggregated": pos.is_aggregated,
                 "is_short": pos.is_short,
-                "qty": pos.qty.significand,
+                "qty": significand_exponent_to_decimal(pos.qty.significand, pos.qty.exponent)
             }
         )
     return poss
