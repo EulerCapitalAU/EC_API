@@ -19,7 +19,8 @@ from EC_API.recorders.sqlite_recorder import SQLiteRecorder
 from EC_API.protocol.cqg.recorder_util import (
     order_status_to_row_default,
     position_status_to_row_default,
-    account_summary_to_row_default
+    account_summary_to_row_default,
+    ORD_STS_COLS, POS_STS_COLS, ACC_SUMM_COLS
     )
 from EC_API.utility.state_mgr import StateMgr
 from EC_API.exceptions import (
@@ -39,6 +40,7 @@ from tests.integration.fixtures.engine_enums import (
 
 HOST_NAME, USR_NAME, PASSWORD, ACCOUNT_ID = 0, 0, 0, 0
 PRIVATE_LABEL = 0
+TRADE_LOG_DB_ADDR = ""
 
 logger = logging.getLogger(__name__)
 
@@ -169,50 +171,7 @@ class TradeEngineController(Controller):
 
         if callback:
             callback(in_stream_name)
-            
-ORD_STS_COLS = (
-    # ---- order statuses fields
-    ("account_id", "INTEGER", "NOT NULL"),
-    ("order_id", "TEXT", "NOT NULL"),
-    ("chain_order_id", "TEXT", "NOT NULL"),
-    ("status", "TEXT", "NOT NULL"),
-    ("status_utc_timestamp","INTEGER", "NOT NULL"),
-    ("submission_utc_timestamp", "INTEGER", "NOT NULL"),
-    ("fill_cnt", "INTEGER", ""),
-    ("scaled_avg_fill_price", "INTEGER",""),
-    ("avg_fill_price_correct","DOUBLE",""),
-    # ---- order fields
-    ("cl_order_id", "TEXT", ""),
-    ("contract_id", "INTEGER", ""),
-    ("symbol_name", "TEXT", ""),
-    ("order_type", "TEXT", ""),
-    ("duration", "TEXT", ""),
-    ("side", "TEXT", ""),
-    ("scaled_limit_price", "INTEGER", ""),
-    ("scaled_stop_price","INTEGER",""),
-    ("qty_significand","INTEGER",""),
-    ("qty_exponent","INTEGER",""),
-    )
-
-POS_STS_COLS = (
-    ("account_id","",""),
-    ("sub_ids","",""),
-    ("contract_id", "", ""),
-    ("is_short_open_position", "", ""),
-    # position 
-    ("id", "", ""),
-    ("price_correct", "", ""),
-    ("trade_date", "", ""),
-    ("statement_date", "", ""),
-    ("is_aggregated", "", ""),
-    ("is_short", "", ""),
-    ("qty", "", "")
-    )
-
-ACC_SUMM_COLS = (
-    ("","",""),
-    )
-
+ 
 class TradeEngineCQG:
     def __init__(
             self, 
@@ -224,25 +183,25 @@ class TradeEngineCQG:
         self.ord_sts_recorder: Recorder = SQLiteRecorder(
             schema = SQLSchemaTable(
                 table_name = "test_trade_engine_audit", 
-                columns = ORD_STS_COLS #!!! fill this up
+                columns = ORD_STS_COLS
                 ), 
-            db_address = "",
+            db_address = TRADE_LOG_DB_ADDR,
             to_row = order_status_to_row_default
             )
         self.pos_sts_recorder: Recorder = SQLiteRecorder(
             schema = SQLSchemaTable(
                 table_name = "test_trade_engine_audit", 
-                columns = (("", "", ""), ("", "", ""),) #!!! fill this up
+                columns = POS_STS_COLS 
                 ), 
-            db_address = "",
+            db_address = TRADE_LOG_DB_ADDR,
             to_row = position_status_to_row_default
             )
         self.acc_summ_recorder: Recorder = SQLiteRecorder(
             schema = SQLSchemaTable(
                 table_name = "test_trade_engine_audit", 
-                columns = (("", "", ""), ("", "", ""),) #!!! fill this up
+                columns = ACC_SUMM_COLS
                 ), 
-            db_address = "",
+            db_address = TRADE_LOG_DB_ADDR,
             to_row = account_summary_to_row_default
             ) 
             
