@@ -25,6 +25,8 @@ class SymbolRegistry:
     def __init__(self):
         self._sym_to_contract_ids: dict[str, int] = dict()
         self._metadata: dict[str, ContractMetaDataType] = dict()
+        self._contract_id_to_sym: dict[int, str] = dict()
+
 
     # --- property
     @property
@@ -47,6 +49,7 @@ class SymbolRegistry:
                 f"MetaData of Symbol: {symbol_name} is already in the registry."
             )
         self._sym_to_contract_ids[symbol_name] = contract_id
+        self._contract_id_to_sym[contract_id] = symbol_name
         return True
 
     def remove_symbol(
@@ -55,6 +58,8 @@ class SymbolRegistry:
     ) -> bool:
         if symbol_name not in self._sym_to_contract_ids:
             raise SymbolNotInRegistryError(f"Symbol: {symbol_name} is not in the registry.")
+            
+        self._contract_id_to_sym.pop(self._sym_to_contract_ids[symbol_name])
         self._sym_to_contract_ids.pop(symbol_name)
         return True
 
@@ -97,14 +102,21 @@ class SymbolRegistry:
             raise SymbolNotInRegistryError(
                 f"Symbol: {symbol_name} is not in the registry.",
             )
-        return self._sym_to_contract_ids[symbol_name]
+        return self._sym_to_contract_ids.get(symbol_name)
 
     def get_metadata(self, symbol_name: str) -> ContractMetaDataType:
         if not self._metadata.get(symbol_name):
             raise MetaDataMissingError(
                 f"MetaData for symbol: {symbol_name} is missing",
             )
-        return self._metadata[symbol_name]
+        return self._metadata.get(symbol_name)
+    
+    def get_symbol_name(self, contract_id: int) -> str:
+        if self._contract_id_to_sym.get(contract_id) is None:
+            raise SymbolNotInRegistryError(
+                f"Contract_id: {contract_id} is not in the registry.",
+            )
+        return self._contract_id_to_sym.get(contract_id)
 
     # --- inqury functions
     def has_symbol(self, symbol_name: str) -> bool:
