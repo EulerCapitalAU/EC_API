@@ -1,5 +1,6 @@
-from typing import Protocol, ClassVar
+from typing import Protocol, ClassVar, Any
 from dataclasses import dataclass
+from EC_API.exceptions import RowConversionError
 
 class Recorder(Protocol):
     """
@@ -84,3 +85,28 @@ class SQLSchemaTable:
         return f"INSERT INTO {self.table_name} ({col_name}) VALUES ({placeholder})"
     
     
+_TYPE_MAP_SQL_PY = {
+    "INTEGER": (int, bool), 
+    "REAL": (float, int), 
+    "TEXT": (str,), 
+    "BLOB": (bytes, bytearray, memoryview),
+    "ANY": (bool, int, float, str, bytes, bytearray, memoryview)
+    }
+
+def _from_dict_to_row(msg: dict[str, Any], schema: SQLSchemaTable) -> tuple[Any,...]:
+    # This assume the schema colums name are exactly the same 
+    # as the field names in a parsed message.    
+    # default output only, in production please use another function.
+    res = []
+    for col_name, col_typ, col_extra in schema.columns:
+        row = msg.get(col_name)
+        if row is None:
+            if "NOT NULL" in col_extra.upper():
+                raise RowConversionError(f"Missing required value in {col_name}.")
+            res.append(None)
+            continue
+        
+        if not isinstance(row, _TYPE_MAP_SQL_PY[col_typ]):
+            raise RowConversionError(f"{col_name}: expected {col_typ}, got {type(row).__name__}.")
+        res.append(row)
+    return tuple(res)

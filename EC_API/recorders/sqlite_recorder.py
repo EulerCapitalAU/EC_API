@@ -10,7 +10,11 @@ import json
 from typing import Optional, Any, Callable
 import sqlite3
 import aiosqlite
-from EC_API.recorders.base import SQLSchemaTable, Recorder
+from EC_API.recorders.base import (
+    SQLSchemaTable, 
+    Recorder, 
+    _from_dict_to_row
+    )
 from EC_API.recorders.error_policies import RecorderErrorPolicy
 from EC_API.exceptions import (
     RowConversionError, 
@@ -18,31 +22,7 @@ from EC_API.exceptions import (
     RecorderCriticalError
     )
 
-_TYPE_MAP_SQL_PY = {
-    "INTEGER": (int, bool), 
-    "REAL": (float, int), 
-    "TEXT": (str,), 
-    "BLOB": (bytes, bytearray, memoryview),
-    "ANY": (bool, int, float, str, bytes, bytearray, memoryview)
-    }
 
-def _from_dict_to_row(msg: dict[str, Any], schema: SQLSchemaTable) -> tuple[Any,...]:
-    # This assume the schema colums name are exactly the same 
-    # as the field names in a parsed message.    
-    # default output only, in production please use another function.
-    res = []
-    for col_name, col_typ, col_extra in schema.columns:
-        row = msg.get(col_name)
-        if row is None:
-            if "NOT NULL" in col_extra.upper():
-                raise RowConversionError(f"Missing required value in {col_name}.")
-            res.append(None)
-            continue
-        
-        if not isinstance(row, _TYPE_MAP_SQL_PY[col_typ]):
-            raise RowConversionError(f"{col_name}: expected {col_typ}, got {type(row).__name__}.")
-        res.append(row)
-    return tuple(res)
 
 class SQLiteRecorder(Recorder):
     def __init__(
@@ -147,10 +127,9 @@ class SQLiteRecorder(Recorder):
                 await self._db.executemany(self._insert_query, self._buf)
             
             if self._policy is RecorderErrorPolicy.DROP:
-                
-                if self._buf:
+                if self._rejected:
                     await self._db.executemany(
-                        self._rejected_schema.insert_query('sqlite3'), self._buf
+                        self._rejected_schema.insert_query('sqlite3'), self._rejected
                         )
                 
             await self._db.commit()
