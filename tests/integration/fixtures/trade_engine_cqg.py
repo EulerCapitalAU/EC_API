@@ -182,7 +182,7 @@ class TradeEngineCQG:
         self.channel: Channel = RedisChannel(channel_cfg_addr)
         self.ord_sts_recorder: Recorder = SQLiteRecorder(
             schema = SQLSchemaTable(
-                table_name = "test_trade_engine_audit", 
+                table_name = "trade_engine_order_statuses", 
                 columns = ORD_STS_COLS
                 ), 
             db_address = TRADE_LOG_DB_ADDR,
@@ -190,7 +190,7 @@ class TradeEngineCQG:
             )
         self.pos_sts_recorder: Recorder = SQLiteRecorder(
             schema = SQLSchemaTable(
-                table_name = "test_trade_engine_audit", 
+                table_name = "trade_engine_position_statuses", 
                 columns = POS_STS_COLS 
                 ), 
             db_address = TRADE_LOG_DB_ADDR,
@@ -198,7 +198,7 @@ class TradeEngineCQG:
             )
         self.acc_summ_recorder: Recorder = SQLiteRecorder(
             schema = SQLSchemaTable(
-                table_name = "test_trade_engine_audit", 
+                table_name = "trade_engine_account_summaries", 
                 columns = ACC_SUMM_COLS
                 ), 
             db_address = TRADE_LOG_DB_ADDR,
