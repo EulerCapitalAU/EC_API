@@ -6,9 +6,13 @@ Created on Thu Sep 17 23:57:10 2026
 @author: dexter
 """
 from typing import Any
-from EC_API.recorders.base import SQLSchemaTable
-from EC_API.recorders.sqlite_recorder import _from_dict_to_row
-           
+from EC_API.recorders.base import SQLSchemaTable, _from_dict_to_row
+from EC_API.utility.symbol_registry import SymbolRegistry
+from EC_API.exceptions import (
+    RowConversionError, 
+    SymbolNotInRegistryError
+    )
+
 ORD_STS_COLS = (
     # ---- order statuses fields
     ("account_id", "INTEGER", "NOT NULL"),
@@ -29,8 +33,7 @@ ORD_STS_COLS = (
     ("side", "TEXT", ""),
     ("scaled_limit_price", "INTEGER", ""),
     ("scaled_stop_price","INTEGER",""),
-    ("qty_significand","INTEGER",""),
-    ("qty_exponent","INTEGER",""),
+    ("qty","INTEGER",""),
     )
 
 POS_STS_COLS = (
@@ -53,21 +56,67 @@ ACC_SUMM_COLS = (
     ("purchasing_power", "REAL", "")
     )
 
+# Message transformation functions
+def flatten_order_status(
+        msg: dict[str, Any], symbol_registry: SymbolRegistry
+        ) -> dict[str, Any]:
+    order_sub = msg.get("order") or {}
+    contract_id = order_sub.get("contract_id")
+    try:
+        symbol_name = (
+            symbol_registry.get_symbol_name(contract_id) if contract_id is not None else None
+        )
+    except SymbolNotInRegistryError:
+        symbol_name = None
+
+    row_msg = dict(msg)
+    row_msg.pop("order", None)
+    row_msg.update(order_sub)
+    if row_msg.get("qty") is not None:
+        row_msg["qty"] = int(row_msg["qty"])
+    row_msg["symbol_name"] = symbol_name
+    return row_msg
+
+def flatten_position_status(
+        msg: dict[str, Any], symbol_registry: SymbolRegistry
+    ) -> list[dict[str, Any]]:
+    open_positions = msg.get("open_positions") or []
+    if not open_positions:
+        return []
+
+    contract_id = msg.get("contract_id")
+    try:
+        symbol_name = (
+            symbol_registry.get_symbol_name(contract_id) if contract_id is not None else None
+        )
+    except SymbolNotInRegistryError:
+        symbol_name = None
+
+    account_id = msg.get("account_id")
+    return [
+        {"account_id": account_id, 
+         "contract_id": contract_id, 
+         "symbol_name": symbol_name, 
+         **op_pos,
+         "qty": int(op_pos["qty"])}
+        for op_pos in open_positions
+    ]
 
 # to_row functions flatten nested message and extract conddensed info, output a flat dict
 def order_status_to_row_default(
         msg: dict[str, Any], schema: SQLSchemaTable
         ) -> tuple[Any]:
     
-    res = []
-    for col_name, col_typ, col_extra in schema.columns:
-        row = msg.get(col_name)
-            
+    #res = []
+    #for col_name, col_typ, col_extra in schema.columns:
+    #    row = msg.get(col_name)
+        
+    return _from_dict_to_row(msg, schema)            
 
 def position_status_to_row_default(
         msg: dict[str, Any], schema: SQLSchemaTable
-        ) -> tuple[Any]:...
-
+        ) -> tuple[Any]:
+    return _from_dict_to_row(msg, schema)
 
 def account_summary_to_row_default(
         msg: dict[str, Any], schema: SQLSchemaTable
