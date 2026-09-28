@@ -22,6 +22,10 @@ from EC_API.ordering.cqg.parsers import ordering_parsers
 from EC_API.recorders.base import Recorder
 from EC_API.recorders.null_recorder import NullRecorder
 from EC_API.protocol.cqg.parser_util import parse_server_msg
+from EC_API.protocol.cqg.recorder_util import (
+    flatten_order_status, 
+    flatten_position_status
+    )
 from EC_API.utility.symbol_registry import SymbolRegistry
 from EC_API.utility.error_handlers import msg_io_error_handler
 from EC_API.exceptions import (
@@ -204,7 +208,9 @@ class TradeSessionCQG:
                             )
                             
                             if self._auto_log:
-                                await self._ord_sts_recorder.record(p_ord_sts)
+                                await self._ord_sts_recorder.record(
+                                    flatten_order_status(p_ord_sts, self._symbol_registry)
+                                    )
 
                             if p_ord_sts.get("status") in TERMINAL_STATES:
                                 done_ord.add(chain_order_id)
@@ -228,7 +234,12 @@ class TradeSessionCQG:
                                 )
                                 
                             if self._auto_log:
-                                await self._pos_sts_recorder.record(p_pos_sts)
+                                # position dict need to be flattened in to row format
+                                # for recorder insert one by one
+                                for row_msg in flatten_position_status(
+                                        p_pos_sts, self._symbol_registry
+                                        ):
+                                    await self._pos_sts_recorder.record(row_msg)
 
                             if all_done and all_done is not None:
                                 done_pos.add(contract_id)
@@ -241,7 +252,9 @@ class TradeSessionCQG:
                         for p_acc_summ in acc_summary:
                             self.latest_account_summaries[account_id] = p_acc_summ
                             if self._auto_log:
-                                await self._acc_summ_recorder.record(acc_summary)
+                                
+                                for row_msg in acc_summary:
+                                    await self._acc_summ_recorder.record(row_msg)
                             
                 # ---- Cleanup ----
                 for chain_order_id in done_ord:
