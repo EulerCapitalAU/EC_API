@@ -5,6 +5,7 @@ Created on Thu Sep 17 23:57:10 2026
 
 @author: dexter
 """
+import time
 from typing import Any
 from EC_API.recorders.base import SQLSchemaTable, _from_dict_to_row
 from EC_API.utility.symbol_registry import SymbolRegistry
@@ -47,13 +48,15 @@ POS_STS_COLS = (
     ("statement_date", "INTEGER", "NOT NULL"),
     ("is_aggregated", "INTEGER", "NOT NULL"),       
     ("is_short", "INTEGER", "NOT NULL"),            
-    ("qty", "REAL", ""),                            
+    ("qty", "REAL", ""),    
+    ("recorded_at", "INTEGER", "NOT NULL"),  # locally stamped 
     )
 
 ACC_SUMM_COLS = (
     ("account_id","INTEGER", "NOT NULL"),
     ("currency","TEXT",""),
-    ("purchasing_power", "REAL", "")
+    ("purchasing_power", "REAL", ""),
+    ("recorded_at", "INTEGER", "NOT NULL"),  # locally stamped 
     )
 
 # Message transformation functions
@@ -74,6 +77,9 @@ def flatten_order_status(
     row_msg.update(order_sub)
     if row_msg.get("qty") is not None:
         row_msg["qty"] = int(row_msg["qty"])
+    for ts_field in ("status_utc_timestamp", "submission_utc_timestamp"):
+        if row_msg.get(ts_field) is not None:
+            row_msg[ts_field] = row_msg[ts_field].ToMilliseconds()
     row_msg["symbol_name"] = symbol_name
     return row_msg
 
@@ -93,14 +99,21 @@ def flatten_position_status(
         symbol_name = None
 
     account_id = msg.get("account_id")
+    recorded_at = time.time_ns() // 1_000_000
     return [
         {"account_id": account_id, 
          "contract_id": contract_id, 
          "symbol_name": symbol_name, 
          **op_pos,
-         "qty": int(op_pos["qty"])}
+         "qty": int(op_pos["qty"]),
+         "recorded_at": recorded_at}
         for op_pos in open_positions
     ]
+
+def flatten_account_summary(msg: dict[str, Any]) -> dict[str, Any]:
+    row_msg = dict(msg)
+    row_msg["recorded_at"] = time.time_ns()// 1_000_000 # epoch ms in UTC
+    return row_msg
 
 # to_row functions flatten nested message and extract conddensed info, output a flat dict
 def order_status_to_row_default(

@@ -24,7 +24,8 @@ from EC_API.recorders.null_recorder import NullRecorder
 from EC_API.protocol.cqg.parser_util import parse_server_msg
 from EC_API.protocol.cqg.recorder_util import (
     flatten_order_status, 
-    flatten_position_status
+    flatten_position_status,
+    flatten_account_summary
     )
 from EC_API.utility.symbol_registry import SymbolRegistry
 from EC_API.utility.error_handlers import msg_io_error_handler
@@ -252,10 +253,9 @@ class TradeSessionCQG:
                         for p_acc_summ in acc_summary:
                             self.latest_account_summaries[account_id] = p_acc_summ
                             if self._auto_log:
-                                
-                                for row_msg in acc_summary:
-                                    await self._acc_summ_recorder.record(row_msg)
-                            
+                                await self._acc_summ_recorder.record(
+                                    flatten_account_summary(p_acc_summ)
+                                    )                            
                 # ---- Cleanup ----
                 for chain_order_id in done_ord:
                     q = self._active_order_q.pop(chain_order_id)
