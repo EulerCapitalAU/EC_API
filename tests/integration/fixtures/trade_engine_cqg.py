@@ -398,7 +398,8 @@ class TradeEngineCQG:
                 self._state_mgr.transition_to(EngineState.RUNNING)
             else:
                 self._state_mgr.transition_to(EngineState.TERMINATED)
-                
+                return False
+            
         except (ChannelMissingSettingError, 
                 RecorderCriticalError) as e:
             logger.warning("[Trade Engine]: %s", e)
