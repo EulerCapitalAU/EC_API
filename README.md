@@ -1,7 +1,7 @@
 # *EC_API*: A vendor-agnostic Execution Framework for Algo Trading 
 ![Python](https://img.shields.io/badge/python-%3E%3D3.12-blue.svg)
 ![CI](https://github.com/EulerCapitalAU/EC_API/actions/workflows/unittest.yml/badge.svg)
-[![Coverage](https://codecov.io/gh/EulerCapitalAU/EC_API/branch/main/graph/badge.svg)](https://codecov.io/gh/dex-hon-sci/EC_API)
+[![Coverage](https://codecov.io/gh/EulerCapitalAU/EC_API/branch/main/graph/badge.svg)](https://codecov.io/gh/EulerCapitalAU/EC_API)
 
 ## **Overview**
 `EC_API` provides easy-to-use functions for algorithmic trading. 
@@ -365,7 +365,7 @@ Note that this engine is made for the purpose of demonstration. In a production
 environment, additional tasks, state control, and event-driven architecture
 are advisable to be included.
 
-### **3. Strategy Building (planned v0.3.0 feature)**
+### **3. Strategy Building (planned v1.1.0 feature)**
 `EC_API` provide useful templates: `OpStrategy` and `OpSignal` 
 classes to aid writing your custom strategy logics by standardising common 
 utilities such as cool-down mechanism and data ingestion.
