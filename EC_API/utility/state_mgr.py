@@ -26,6 +26,7 @@ class StateMgr(Generic[T]):
         allowed_starts: Sequence[T | None] = [],
     ):
         self.trans_map: dict[T, list[T]] = trans_map
+        self.trans_log: list[tuple[T,T]] = list() # !!! Transition log can grow indefinintely, in the next iteration, implement this with maxlen and flushing functions
         # Allowed start pts. If empty, all nodes are allowed
         self._allowed_starts: Sequence[T | None] = allowed_starts
         self.finalised: bool = False
@@ -58,5 +59,6 @@ class StateMgr(Generic[T]):
         if not self.trans_map[next_state]:
             self.finalised = True
 
+        self.trans_log.append((self.cur, next_state))
         self.cur = next_state  # assign transition
         return True
