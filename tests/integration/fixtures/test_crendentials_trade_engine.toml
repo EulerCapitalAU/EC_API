@@ -1,0 +1,12 @@
+[ credentials ]
+HOST_NAME = ""
+USR_NAME = ""
+PASSWORD = ""
+ACCOUNT_ID = ""
+PRIVATE_LABEL = ""
+
+[ trade_recorders ]
+TRADE_LOG_DB_ADDR = ""
+ord_sts_table_name = "trade_engine_order_statuses"
+pos_sts_table_name = "trade_engine_position_statuses"
+acc_summ_table_name = "trade_engine_account_summaries"
