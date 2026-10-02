@@ -16,7 +16,10 @@ from datetime import datetime, timezone
 from EC_API.ext.WebAPI import webapi_client
 from EC_API.connect.base import Connect
 from EC_API.connect.enums import ConnectionState
-from EC_API.connect.latency_util import latency_above_threshold, jitter_above_threshold
+from EC_API.connect.latency_util import (
+    latency_above_threshold, 
+    jitter_above_threshold
+)
 from EC_API.transport.cqg.base import TransportCQG
 from EC_API.transport.routers import MessageRouter, StreamRouter
 from EC_API.protocol.cqg.router_util import (

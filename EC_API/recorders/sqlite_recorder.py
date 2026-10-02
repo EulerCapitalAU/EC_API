@@ -78,9 +78,10 @@ class SQLiteRecorder(Recorder):
             await self._db.execute(self._schema.create_query())
             
             if self._policy is RecorderErrorPolicy.DROP:
-                assert self._rejected_schema is not None
-
                 self._rejected_schema_init()
+                if self._rejected_schema is None:
+                    raise RecorderCriticalError("Failed to initialize the rejected-rows schema.")
+                    
                 await self._db.execute(self._rejected_schema.create_query())
             await self._db.commit()
             
@@ -130,7 +131,8 @@ class SQLiteRecorder(Recorder):
             
             if self._policy is RecorderErrorPolicy.DROP:
                 
-                assert self._rejected_schema is not None
+                if self._rejected_schema is  None:
+                    raise RecorderOperationalError("_flush() called before start() initialized the rejected-rows schema.")
                 
                 if self._rejected:
                     await self._db.executemany(
