@@ -6,7 +6,7 @@ Created on Mon May 18 00:29:07 2026
 @author: dexter
 """
 import tomllib
-from typing import Optional
+from typing import Optional, Any
 import msgpack
 import redis.asyncio as aioredis
 from redis.asyncio.client import PubSub, Pipeline
@@ -79,7 +79,6 @@ class RedisChannel(Channel):
             for stream_name in self.in_streams:
                 last = await self.r.xrevrange(stream_name, count=1)
                 self.last_ids[stream_name] = last[0][0] if last else "0"
-
 
     async def disconnect(self):
         if not self.r:

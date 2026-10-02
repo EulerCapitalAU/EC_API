@@ -6,11 +6,12 @@ Created on Wed May 13 19:44:46 2026
 @author: dexter
 """
 
-from typing import Protocol, Callable, Any
-
+from typing import Protocol, Callable, Any, Optional
 
 class Channel(Protocol):
-    on_data: Callable[[Any], None]  # wired to DataBus.push at engine construction
+    #on_data: Callable[[Any], None]  # wired to DataBus.push at engine construction
+    in_streams: Optional[set[str]]
+    last_ids: Optional[dict[str, str]]
 
     async def connect(self) -> None: ...
     async def disconnect(self) -> None: ...
