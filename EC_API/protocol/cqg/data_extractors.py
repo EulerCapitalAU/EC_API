@@ -39,8 +39,8 @@ def register_extractor(policy_name: str):
 
 
 # --- Parsed Real-Time Market Data ---
-@register_extractor("simple_trade")
-def extract_trade_data(parsed_rtmd: ParsedRTMDCQG) -> Sequence[tuple[Any]]:
-    ...
+#@register_extractor("simple_trade")
+#def extract_trade_data(parsed_rtmd: ParsedRTMDCQG) -> Sequence[tuple[Any]]:
+#    ...
     
     

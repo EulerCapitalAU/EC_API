@@ -239,7 +239,7 @@ class LiveOrderCQG(LiveOrder):
     # --- Function call ---
     async def send(
         self, request_type: RequestType, request_details: dict, **kwargs
-    ) -> Optional[list[dict]]:
+    ) -> Optional[list[dict[str,Any]]]:
         
         # --- Symbol checks
         if request_type not in (

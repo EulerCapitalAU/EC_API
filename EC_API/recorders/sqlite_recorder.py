@@ -43,7 +43,7 @@ class SQLiteRecorder(Recorder):
         # Recorder Config
         self._policy: RecorderErrorPolicy = policy
         self._batch_size: int = batch_size
-        self._flush_interval: int = flush_interval #seconds
+        self._flush_interval: float = flush_interval #seconds
         
         # message format for logging
         # Conversion from raw message to DB format
@@ -53,19 +53,19 @@ class SQLiteRecorder(Recorder):
         self._insert_query: str = self._schema.insert_query('sqlite3')
         
         # Containers
-        self._buf: list[tuple[Any,...],...] = list()
-        self._rejected: list[tuple[Any,...],...] = list()
+        self._buf: list[Any] = list()
+        self._rejected: list[Any] = list()
         
     @property
     def schema(self) -> SQLSchemaTable:
         return self._schema
     
     def _rejected_schema_init(self) -> None:
-        reject_cols = [
+        reject_cols = (
             ("seq", "INTEGER", "PRIMARY KEY AUTOINCREMENT"),
             ("ts_ns", "INTEGER", "NOT NULL"), 
             ("raw", "TEXT", "NOT NULL")
-            ]
+            )
         self._rejected_schema = SQLSchemaTable(
             f"{self.schema.table_name}_rejected", reject_cols, strict=True
             )
@@ -78,6 +78,8 @@ class SQLiteRecorder(Recorder):
             await self._db.execute(self._schema.create_query())
             
             if self._policy is RecorderErrorPolicy.DROP:
+                assert self._rejected_schema is not None
+
                 self._rejected_schema_init()
                 await self._db.execute(self._rejected_schema.create_query())
             await self._db.commit()
@@ -127,6 +129,9 @@ class SQLiteRecorder(Recorder):
                 await self._db.executemany(self._insert_query, self._buf)
             
             if self._policy is RecorderErrorPolicy.DROP:
+                
+                assert self._rejected_schema is not None
+                
                 if self._rejected:
                     await self._db.executemany(
                         self._rejected_schema.insert_query('sqlite3'), self._rejected

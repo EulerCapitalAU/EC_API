@@ -102,21 +102,21 @@ class SymbolRegistry:
             raise SymbolNotInRegistryError(
                 f"Symbol: {symbol_name} is not in the registry.",
             )
-        return self._sym_to_contract_ids.get(symbol_name)
+        return self._sym_to_contract_ids[symbol_name]
 
     def get_metadata(self, symbol_name: str) -> ContractMetaDataType:
         if not self._metadata.get(symbol_name):
             raise MetaDataMissingError(
                 f"MetaData for symbol: {symbol_name} is missing",
             )
-        return self._metadata.get(symbol_name)
+        return self._metadata[symbol_name]
     
     def get_symbol_name(self, contract_id: int) -> str:
         if self._contract_id_to_sym.get(contract_id) is None:
             raise SymbolNotInRegistryError(
                 f"Contract_id: {contract_id} is not in the registry.",
             )
-        return self._contract_id_to_sym.get(contract_id)
+        return self._contract_id_to_sym[contract_id]
 
     # --- inqury functions
     def has_symbol(self, symbol_name: str) -> bool:

@@ -75,9 +75,10 @@ class RedisChannel(Channel):
         self._pubsub = self.r.pubsub()
         self.pipeline = self.r.pipeline()
         
-        for stream_name in self.in_streams:
-            last = await self.r.xrevrange(stream_name, count=1)
-            self.last_ids[stream_name] = last[0][0] if last else "0"
+        if (self.in_streams is not None) and (self.last_ids is not None):
+            for stream_name in self.in_streams:
+                last = await self.r.xrevrange(stream_name, count=1)
+                self.last_ids[stream_name] = last[0][0] if last else "0"
 
 
     async def disconnect(self):

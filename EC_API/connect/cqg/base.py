@@ -419,7 +419,7 @@ class ConnectCQG(Connect):
                                     if not ticket_exist:
                                         # (5) --- Unsolicited Messages ---
                                         await self._misc_queue.put(msg)
-                                        await self._dust_bin_evt.set()
+                                        self._dust_bin_evt.set()
 
             except asyncio.CancelledError as e:
                 logger.error(str(e))
@@ -435,7 +435,7 @@ class ConnectCQG(Connect):
     async def _dust_bin_handle(self) -> None: ...
 
         # --- (5) Dust Bin/Unsolicited Message Collections ---
-        # For server-side
+        # !!! For server-side
         # 1. logged_off
         # 2. concurrent_connection_join_results
         # 3. information_reports:symbol_resolution_report

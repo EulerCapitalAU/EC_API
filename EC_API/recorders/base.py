@@ -12,7 +12,7 @@ class Recorder(Protocol):
     def __init__(self): pass
     async def start(self): pass
     async def stop(self): pass
-    async def record(self) -> None: pass
+    async def record(self, msg: Any) -> None: pass
 
 @dataclass(frozen=True)
 class SQLSchemaTable:
@@ -53,11 +53,11 @@ class SQLSchemaTable:
         object.__setattr__(self, "columns", tuple(normalised_columns))
         
     @property
-    def column_names(self)->tuple[str]:
+    def column_names(self)->tuple[str,...]:
         return tuple([name for name, _, _ in self.columns])
     
     @property
-    def insertable_columns(self) -> tuple[str]:
+    def insertable_columns(self) -> tuple[tuple[str, str, str],...]:
         return tuple(c for c in self.columns if "AUTOINCREMENT" not in c[2].upper())
     
     def create_query(self) -> str:
@@ -97,7 +97,7 @@ def _from_dict_to_row(msg: dict[str, Any], schema: SQLSchemaTable) -> tuple[Any,
     # This assume the schema colums name are exactly the same 
     # as the field names in a parsed message.    
     # default output only, in production please use another function.
-    res = []
+    res: list[Any] = []
     for col_name, col_typ, col_extra in schema.columns:
         row = msg.get(col_name)
         if row is None:

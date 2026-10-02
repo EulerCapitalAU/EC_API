@@ -6,7 +6,7 @@ Created on Tue Jul 29 13:19:48 2025
 @author: dexter
 """
 
-from typing import Protocol, Any
+from typing import Protocol, Any, Optional
 from EC_API.ordering.enums import RequestType
 from EC_API.ordering.trade_session import TradeSession
 
@@ -19,4 +19,4 @@ class LiveOrder(Protocol):
 
     def rid(self) -> int: ...
 
-    async def send(self, request_type: RequestType, request_details: dict, **kwargs) -> Any: ...
+    async def send(self, request_type: RequestType, request_details: dict, **kwargs) -> Optional[list[dict[str,Any]]]: ...
