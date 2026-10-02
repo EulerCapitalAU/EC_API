@@ -1,4 +1,4 @@
-from typing import TypeVar, Any, Callable, TypeAlias
+from typing import TypeVar, Any, Callable, TypeAlias, Final
 
 # ------ MsgType ------
 ServerMsgType = TypeVar("ServerMsgType")
@@ -52,10 +52,10 @@ RestoreResultType = dict[str, Any]
 # Pong tuple layout (Universal)
 PongType = tuple[str, str, int, int]
 
-PONG_MSG_NAME = 0
-PONG_TOKEN = 1
-PONG_PINGTIME = 2
-PONG_PONGTIME = 3
+PONG_MSG_NAME: Final = 0
+PONG_TOKEN: Final = 1
+PONG_PINGTIME: Final = 2
+PONG_PONGTIME: Final = 3
 
 # Connect:metadata
 ContractMetaDataType = dict[str, Any]

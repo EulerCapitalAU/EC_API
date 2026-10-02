@@ -22,8 +22,6 @@ from EC_API.exceptions import (
     RecorderCriticalError
     )
 
-
-
 class SQLiteRecorder(Recorder):
     def __init__(
             self, 

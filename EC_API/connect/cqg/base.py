@@ -464,6 +464,9 @@ class ConnectCQG(Connect):
             client_rtt = 0.0
             try:
                 parsed_pong = await self.ping(token)
+                
+                if parsed_pong is None:
+                    continue
                 server_rtt = parsed_pong[PONG_PONGTIME] - parsed_pong[PONG_PINGTIME] 
                 client_rtt = self._loop.time() - start
                 
