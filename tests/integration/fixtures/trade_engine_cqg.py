@@ -8,6 +8,7 @@ from EC_API.channel.base import Channel
 from EC_API.channel.redis import RedisChannel
 from EC_API.connect.base import Connect
 from EC_API.connect.enums import ConnectionState
+from EC_API.connect.session_util import check_if_logoffed
 from EC_API.connect.cqg.base import ConnectCQG
 from EC_API.ordering.trade_session import TradeSession
 from EC_API.ordering.cqg.trade_session import TradeSessionCQG
@@ -39,13 +40,26 @@ from tests.integration.fixtures.engine_enums import (
     EngineState, ENGINESTATE_LIFECYCLE
     )
 
-#HOST_NAME, USR_NAME, PASSWORD, ACCOUNT_ID = 0, 0, 0, 0
-#PRIVATE_LABEL = 0
-#TRADE_LOG_DB_ADDR = ""
-
 logger = logging.getLogger(__name__)
 
-class Controller(Protocol):...
+class Controller(Protocol):
+    async def add_in_stream(
+            self, in_stream_name: str,
+            callback: Optional[Callable[[Any], None]] = None,
+            auto_sub: bool = True
+        ) -> None: ...
+
+    async def remove_in_stream(
+            self,
+            in_stream_name: str,
+            callback: Optional[Callable[[Any], Any]] = None,
+            auto_unsub: bool = True
+        ) -> Optional[Any]: ...
+
+    async def bootstrap_in_stream(
+            self, in_stream_name: str,
+            callback: Optional[Callable[[Any], None]] = None
+        ) -> None: ...
 
 class TradeEngineController(Controller):
     def __init__(
@@ -80,7 +94,9 @@ class TradeEngineController(Controller):
             callback: Optional[Callable[[Any], None]] = None,
             auto_sub: bool = True
         ) -> None:
-
+        if self._channel.in_streams is None:
+            raise ControllerInputError("Channel's 'in_streams' is not configured.")
+            
         if in_stream_name in self._channel.in_streams:
             raise ControllerInputError(
                 f"stream_name: {in_stream_name} is already in the channel."
@@ -117,6 +133,11 @@ class TradeEngineController(Controller):
             callback: Optional[Callable[[Any], Any]] = None,
             auto_unsub: bool = True
         ) -> Optional[Any]:
+        if self._channel.in_streams is None:
+            raise ControllerInputError("Channel's 'in_streams' is not configured.")
+        if self._channel.last_ids is None:
+            raise ControllerInputError("Channel's 'last_ids' is not configured.")
+    
         if in_stream_name not in self._channel.in_streams:
             raise ControllerInputError(
                 f"stream_name: {in_stream_name} is not in the channel."
@@ -145,7 +166,7 @@ class TradeEngineController(Controller):
         if callback:
             return callback(in_stream_name)
         else:
-            return
+            return None
         
     async def bootstrap_in_stream(
             self, in_stream_name: str,
@@ -181,7 +202,8 @@ class TradeEngineCQG:
             pretraderisk_cfg_addr:str
         ):
         # ---- user inputs setting ----
-        usr_para = tomllib.load(usr_cfg)
+        with open(usr_cfg, mode="rb") as f:
+            usr_para = tomllib.load(f)
         
         if usr_para.get('credentials') is None:
             logger.warning("'credentials' is missing in the user config.")
@@ -194,7 +216,7 @@ class TradeEngineCQG:
         self.HOST_NAME: str = usr_para['credentials'].get("HOST_NAME","")
         self.USR_NAME: str = usr_para['credentials'].get("USR_NAME","")
         self.PASSWORD: str = usr_para['credentials'].get("PASSWORD","")
-        self.ACCOUNT_ID: str = usr_para['credentials'].get("ACCOUNT_ID","")
+        self.ACCOUNT_ID: int = usr_para['credentials'].get("ACCOUNT_ID","")
         self.PRIVATE_LABEL: str = usr_para['credentials'].get("PRIVATE_LABEL","")
         self.TRADE_LOG_DB_ADDR: str = usr_para["trade_recorders"].get("TRADE_LOG_DB_ADDR", "")
         self.ord_sts_table_name: str = usr_para["trade_recorders"].get("ord_sts_table_name", "")
@@ -297,15 +319,15 @@ class TradeEngineCQG:
             self._send_order_loop(in_stream_name)
             )
 
-    def _remove_task(self, in_stream_name: str) -> asyncio.Task:
+    def _remove_task(self, in_stream_name: str) -> Optional[asyncio.Task]:
         task = self._send_order_tasks.pop(in_stream_name, None)
         if task is not None:
             task.cancel()
-
         return task
 
     async def _send_order_loop(self, in_stream_name: str) -> None:
         while not self._stop_evt.is_set():
+
             # Continuous listening to the latest order instruction from redis stream
             msg = await self.channel.listen(in_stream_name)             
             # If there is something, an event is triggered
@@ -323,7 +345,7 @@ class TradeEngineCQG:
                 logger.error("[Trade Engine] %s", e)
             
     # ------- Controls
-    async def command_response(self, cmd: str) -> None:
+    async def command_response(self, cmd: tuple[Any, ...]) -> None:
         match cmd[0]: # ("CMD:add_stream", "order_info:WTI")
             case "CMD:add_stream":
                 await self.controller.add_in_stream(
@@ -332,10 +354,12 @@ class TradeEngineCQG:
             case "CMD:remove_stream":
                 task = await self.controller.remove_in_stream(
                     cmd[1], callback = self._remove_task)
-                try:
-                    await task          # await ONLY here — to let CancelledError settle
-                except asyncio.CancelledError:
-                    pass
+                if task is not None: 
+                    try:
+                        await task          # await ONLY here — to let CancelledError settle
+                    except asyncio.CancelledError:
+                        pass
+                
             case "CMD:freeze_engine":
                 await self.request_freeze()
             case "CMD:unfreeze_engine":
@@ -400,6 +424,7 @@ class TradeEngineCQG:
             trade_session_start = await self.trade_session.start()
             if not trade_session_start:
                 logger.warning("[Trade Engine]: Failed to launch Trade Session.")
+                await self.stop()
                 return False
             
             for trial in range(self.num_logon_trial):
@@ -409,9 +434,10 @@ class TradeEngineCQG:
                     protocol_version_major = 2,
                     protocol_version_minor = 240,
                     drop_concurrent_session = False,
-                    private_label = PRIVATE_LABEL,
+                    private_label = self.PRIVATE_LABEL,
                     )
-                logger.info(f"[Trade Engine]: Logon attempt {trial} result: {logon_res.get('result_code')}.")
+                if logon_res is not None:
+                    logger.info(f"[Trade Engine]: Logon attempt {trial} result: {logon_res.get('result_code')}.")
         
                 if self.trade_session.state == ConnectionState.CONNECTED_LOGON:
                     return True
@@ -432,14 +458,18 @@ class TradeEngineCQG:
                 self._state_mgr.transition_to(EngineState.RUNNING)
             else:
                 self._state_mgr.transition_to(EngineState.TERMINATED)
+                await self.stop()
                 return False
             
         except (ChannelMissingSettingError, 
                 RecorderCriticalError) as e:
             logger.warning("[Trade Engine]: %s", e)
+            await self.stop()
             return False
         
         try:
+            if self.channel.in_streams is None:
+                raise ControllerInputError("Channel's 'in_streams' is not configured.")
             # subscribe all the trade subscriptions and pre-resolve symbols
             for stream_name in self.channel.in_streams:
                 await self.controller.bootstrap_in_stream(
@@ -448,6 +478,7 @@ class TradeEngineCQG:
         except ControllerInputError as e:
             logger.error("[Trade Engine]: %s", e)
             self._state_mgr.transition_to(EngineState.TERMINATED)
+            await self.stop()
             return False
         return True
 
@@ -457,19 +488,24 @@ class TradeEngineCQG:
         self._stop_evt.set()
         
         logoff_done = True
-        try: # logoff
-            for trial in range(self.num_logoff_trial):
-                logoff_res = await self.trade_session._conn.logoff()
-                logger.info(
-                    f"[Trade Engine]: Logoff attempt {trial} reason: {logoff_res.get('logoff_reason')}."
-                    )
-                if self.trade_session.state == ConnectionState.CONNECTED_LOGOFF:
-                    break
+        if self.trade_session.state == ConnectionState.CONNECTED_LOGON:
+            try: # logoff                    
+                for trial in range(self.num_logoff_trial):
+                    logoff_res = await self.trade_session._conn.logoff()
+                    if logoff_res is not None:
+                        logger.info(
+                            f"[Trade Engine]: Logoff attempt {trial} reason: {logoff_res.get('logoff_reason')}."
+                            )
+                    if self.trade_session.state == ConnectionState.CONNECTED_LOGOFF:
+                        break
                 
-        except (ConnectRequestError, ConnectTimeOutError) as e:
-            logger.warning("[Trade Engine]: %s", e)
+            except (ConnectRequestError, ConnectTimeOutError) as e:
+                logger.warning("[Trade Engine]: %s", e)
+                logoff_done = False
+        elif not check_if_logoffed(trans_log = self.trade_session._conn._state_mgr.trans_log):
+            logger.warning("[Trade Engine]: Trade Session not in a state to be logoff.")
             logoff_done = False
-
+            
         # --- stop trade_session
         trade_session_stopped = await self.trade_session.stop()
         if not trade_session_stopped:
@@ -477,6 +513,8 @@ class TradeEngineCQG:
 
         stream_cleanup_done = True
         try: # stream cleanup
+            if self.channel.in_streams is None:
+                raise ControllerInputError("Channel's 'in_streams' is not configured.")
             for stream_name in list(self.channel.in_streams):
                 await self.controller.remove_in_stream(
                     stream_name, callback=self._remove_task,
@@ -524,7 +562,7 @@ class TradeEngineCQG:
         try:
             is_started = await self.start()
             if not is_started:
-                logger.error("[Trade Engine] Engine Start Fail.")
+                logger.error("[Trade Engine] Engine failed to start.")
                 return
             
             # Main loop
