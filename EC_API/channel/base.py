@@ -11,6 +11,7 @@ from typing import Protocol, Callable, Any, Optional
 class Channel(Protocol):
     #on_data: Callable[[Any], None]  # wired to DataBus.push at engine construction
     in_streams: Optional[set[str]]
+    out_streams: Optional[set[str]]
     last_ids: Optional[dict[str, str]]
 
     async def connect(self) -> None: ...
