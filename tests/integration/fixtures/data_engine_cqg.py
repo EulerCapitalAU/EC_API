@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 HOST_NAME, USR_NAME, PASSWORD, ACCOUNT_ID = 0,0,0,0
 PRIVATE_LABEL = 0
 
-class Controller:...
+class Controller(Protocol):...
 class DataEngineController(Controller):
     def __init__(
             self, 

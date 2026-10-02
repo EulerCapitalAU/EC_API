@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import tomllib
 from datetime import datetime, timezone
 from typing import Protocol, Optional, Callable, Any
 
@@ -38,9 +39,9 @@ from tests.integration.fixtures.engine_enums import (
     EngineState, ENGINESTATE_LIFECYCLE
     )
 
-HOST_NAME, USR_NAME, PASSWORD, ACCOUNT_ID = 0, 0, 0, 0
-PRIVATE_LABEL = 0
-TRADE_LOG_DB_ADDR = ""
+#HOST_NAME, USR_NAME, PASSWORD, ACCOUNT_ID = 0, 0, 0, 0
+#PRIVATE_LABEL = 0
+#TRADE_LOG_DB_ADDR = ""
 
 logger = logging.getLogger(__name__)
 
@@ -175,39 +176,66 @@ class TradeEngineController(Controller):
 class TradeEngineCQG:
     def __init__(
             self, 
+            usr_cfg: str,
             channel_cfg_addr: str, 
             pretraderisk_cfg_addr:str
         ):
+        # ---- user inputs setting ----
+        usr_para = tomllib.load(usr_cfg)
+        
+        if usr_para.get('credentials') is None:
+            logger.warning("'credentials' is missing in the user config.")
+            return
+        
+        if usr_para.get('trade_recorders') is None:
+            logger.warning("'trade_recorders' is missing in the user config.")
+            return 
+    
+        self.HOST_NAME: str = usr_para['credentials'].get("HOST_NAME","")
+        self.USR_NAME: str = usr_para['credentials'].get("USR_NAME","")
+        self.PASSWORD: str = usr_para['credentials'].get("PASSWORD","")
+        self.ACCOUNT_ID: str = usr_para['credentials'].get("ACCOUNT_ID","")
+        self.PRIVATE_LABEL: str = usr_para['credentials'].get("PRIVATE_LABEL","")
+        self.TRADE_LOG_DB_ADDR: str = usr_para["trade_recorders"].get("TRADE_LOG_DB_ADDR", "")
+        self.ord_sts_table_name: str = usr_para["trade_recorders"].get("ord_sts_table_name", "")
+        self.pos_sts_table_name: str = usr_para["trade_recorders"].get("pos_sts_table_name", "")
+        self.acc_summ_table_name: str = usr_para["trade_recorders"].get("acc_summ_table_name","")
+        
         # ---- IPC Channel setting ----
         self.channel: Channel = RedisChannel(channel_cfg_addr)
         self.ord_sts_recorder: Recorder = SQLiteRecorder(
             schema = SQLSchemaTable(
-                table_name = "trade_engine_order_statuses", 
+                table_name = self.ord_sts_table_name, 
                 columns = ORD_STS_COLS
                 ), 
-            db_address = TRADE_LOG_DB_ADDR,
+            db_address = self.TRADE_LOG_DB_ADDR,
             to_row = order_status_to_row_default
             )
         self.pos_sts_recorder: Recorder = SQLiteRecorder(
             schema = SQLSchemaTable(
-                table_name = "trade_engine_position_statuses", 
+                table_name = self.pos_sts_table_name, 
                 columns = POS_STS_COLS 
                 ), 
-            db_address = TRADE_LOG_DB_ADDR,
+            db_address = self.TRADE_LOG_DB_ADDR,
             to_row = position_status_to_row_default
             )
         self.acc_summ_recorder: Recorder = SQLiteRecorder(
             schema = SQLSchemaTable(
-                table_name = "trade_engine_account_summaries", 
+                table_name = self.acc_summ_table_name, 
                 columns = ACC_SUMM_COLS
                 ), 
-            db_address = TRADE_LOG_DB_ADDR,
+            db_address = self.TRADE_LOG_DB_ADDR,
             to_row = account_summary_to_row_default
             ) 
             
         # ---- Sessions setting ----
-        self.conn: Connect = ConnectCQG(HOST_NAME, USR_NAME, PASSWORD, ACCOUNT_ID)
-        self.trade_session: TradeSession = TradeSessionCQG(
+        self.conn: Connect = ConnectCQG(
+            self.HOST_NAME, 
+            self.USR_NAME, 
+            self.PASSWORD, 
+            self.ACCOUNT_ID
+            )
+        self.trade_session: TradeSessionCQG = TradeSessionCQG(
             self.conn,
             ord_sts_recorder=self.ord_sts_recorder,
             pos_sts_recorder=self.pos_sts_recorder,
@@ -242,6 +270,8 @@ class TradeEngineCQG:
             cur=EngineState.READY,
             allowed_starts=[EngineState.READY],
         )
+        #self.is_started: bool = False
+        #self.is_stopped: bool = False
 
     @property
     def state(self):
@@ -392,6 +422,10 @@ class TradeEngineCQG:
 
                 
     async def start(self) -> bool:
+        if self.state is not EngineState.READY:
+            logger.warning("[Trade Engine]: start() called from state %s.", self.state)
+            return False
+        
         try:
             setup_is_done = await self._setup()
             if setup_is_done:
@@ -421,7 +455,8 @@ class TradeEngineCQG:
         if self._stop_evt.is_set():
             return False
         self._stop_evt.set()
-
+        
+        logoff_done = True
         try: # logoff
             for trial in range(self.num_logoff_trial):
                 logoff_res = await self.trade_session._conn.logoff()
@@ -433,13 +468,14 @@ class TradeEngineCQG:
                 
         except (ConnectRequestError, ConnectTimeOutError) as e:
             logger.warning("[Trade Engine]: %s", e)
-            return False
+            logoff_done = False
 
-        is_stopped = await self.trade_session.stop()
-        if not is_stopped:
+        # --- stop trade_session
+        trade_session_stopped = await self.trade_session.stop()
+        if not trade_session_stopped:
             logger.error("[Trade Engine] Trade Session is not stopped.")
-            return False
 
+        stream_cleanup_done = True
         try: # stream cleanup
             for stream_name in list(self.channel.in_streams):
                 await self.controller.remove_in_stream(
@@ -448,9 +484,9 @@ class TradeEngineCQG:
                     )
         except ControllerInputError as e:
             logger.warning("[Trade Engine]: %s", e)
-            return False
+            stream_cleanup_done = False
 
-        # End control loop
+        # --- End control loop
         if self._control_task is not None:
             self._control_task.cancel()
             try:
@@ -458,14 +494,16 @@ class TradeEngineCQG:
             except asyncio.CancelledError:
                 pass
             
-        try:
+        channel_disconnected = True
+        try: # --- close channel
             await self.channel.disconnect()
         except ChannelMissingSettingError as e:
             logger.warning("[Trade Engine]: %s", e)
-            return False
+            channel_disconnected = False
 
         self._state_mgr.transition_to(EngineState.TERMINATED)
-        return True
+        return (logoff_done and trade_session_stopped and \
+                stream_cleanup_done and channel_disconnected)
         
     # --- Engine request methods ----
     async def request_freeze(self) -> None:
