@@ -10,7 +10,7 @@ from .base import Recorder, SQLSchemaTable
 from .error_policies import RecorderErrorPolicy
 from .null_recorder import NullRecorder
 from .sqlite_recorder import SQLiteRecorder
-from psycopg_recorder import PostgresRecorder
+from .psycopg_recorder import PostgresRecorder
 
 __all__ = [
     "Recorder",
