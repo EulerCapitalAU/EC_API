@@ -61,7 +61,6 @@ class FakeExchangeDataServerCQG:
         )
         
         asyncio.create_task(self.stream_producer_task(contract_id, gmb_tape))
-        
         asyncio.create_task(self.stream_consumer_send_task(contract_id))
     
     def despawn_stream(self, contract_id:int, queue:asyncio.Queue):

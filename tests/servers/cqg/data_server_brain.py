@@ -93,6 +93,8 @@ class FakeDataServerBrainCQG(ServerBrain):
                 server_msg = build_restore_or_join_session_result_server_msg(
                     ServerMsg()                    
                     )
+                return server_msg
+        return
 
     async def _logoff_response(self, client_msg: ClientMsg) -> ServerMsg | None:
         if self.success_decisions.get("logoff") is not None:
@@ -149,7 +151,7 @@ class FakeDataServerBrainCQG(ServerBrain):
         #await self.transport.in_q.put(sym_rp)
         
     # ---- Realtime Market ----
-    async def _mkt_data_status_response(self, client_msg: ClientMsg):
+    async def _mkt_data_status_response(self, client_msg: ClientMsg) -> ServerMsg | None:
         if self.success_decisions.get("market_data_subscriptions") is not None:
             if self.success_decisions["market_data_subscriptions"]:
                 for mkt_sub in client_msg.market_data_subscriptions:
@@ -158,6 +160,7 @@ class FakeDataServerBrainCQG(ServerBrain):
                         contract_id= mkt_sub.contract_id,
                         level = mkt_sub.level
                         )
+                    return mkt_status
             elif not self.success_decisions["market_data_subscriptions"]:
                 for mkt_sub in client_msg.market_data_subscriptions:
 
@@ -166,19 +169,19 @@ class FakeDataServerBrainCQG(ServerBrain):
                         contract_id= mkt_sub.contract_id,
                         level = mkt_sub.level
                         )
+                    return mkt_status
+        return
             
-            #await self.transport.in_q.put(mkt_status)
-        
     async def _mkt_data_stream_responses(self, client_msg: ClientMsg):
         for mkt_sub in client_msg.market_data_subscriptions:
             server_msg = build_real_time_market_data_server_msg(
                 ServerMsg(),
                 contract_id = mkt_sub.contract_id
                 )
-            
             #await self.transport.in_q.put(server_msg)
             
-    async def _unsubscribe_mkt_data_response(self):
-        ...
-    
+    async def _unsubscribe_mkt_data_response(self, client_msg: ClientMsg) -> ServerMsg | None:
+        if self.success_decisions.get("unsubscribe_mkt_data") is not None:
+            ...
+        return
 
