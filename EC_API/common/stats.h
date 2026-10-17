@@ -15,7 +15,8 @@ enum class StatType {
     MOMENT, 
     VWAP, 
     MEDIAN, 
-    COUNT_ };
+    COUNT_ 
+};
 
 inline constexpr size_t kStatTypeCount = static_cast<size_t>(StatType::COUNT_);
 

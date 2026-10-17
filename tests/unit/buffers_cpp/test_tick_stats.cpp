@@ -133,14 +133,47 @@ TEST(VWAPStat, InitSuccess) {
 }
 
 //test VWAPStat update
-TEST(VWAPStat, UpdateSuccess) {}
+TEST(VWAPStat, UpdateSuccess) {
+    std::deque<TradeTick> window;
+    VWAPStat<std::deque<TradeTick>> stat_obj(window);
+    
+    //ingest data and update stat
+    window.push_back({0.0,100.0,10});
+    stat_obj.update(window.back());
+    window.push_back({1.0,105.0,5});
+    stat_obj.update(window.back());
+    window.push_back({2.0,98.0,3});
+    stat_obj.update(window.back());
+
+    VWAPSnapshot snap = stat_obj.get_snapshot();
+    EXPECT_NEAR(snap.vwap, 101.0556, 1e-4);
+}
 
 //test VWAPStat evict
-TEST(VWAPStat, EvictSuccess) {}
+TEST(VWAPStat, EvictSuccess) {
+    std::deque<TradeTick> window;
+    VWAPStat<std::deque<TradeTick>> stat_obj(window);
+    
+    //ingest data and update stat
+    window.push_back({0.0,100.0,10});
+    stat_obj.update(window.back());
+    window.push_back({1.0,105.0,5});
+    stat_obj.update(window.back());
+    window.push_back({2.0,98.0,3});
+    stat_obj.update(window.back());
+    
+    TradeTick evicted = window.front();
+    window.pop_front();
+    
+    stat_obj.evict(evicted); //evict the front and check new stat
+    
+    VWAPSnapshot snap = stat_obj.get_snapshot();
+    EXPECT_NEAR(snap.vwap, 102.3750, 1e-4);
+}
 
 
 //Test init_stats
-TEST(init_stas, UpdateSuccess) {}
+TEST(init_stas, Success) {}
 
 //Sad Paths -- Deque init
 

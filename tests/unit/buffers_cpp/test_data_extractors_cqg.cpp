@@ -6,7 +6,21 @@
 #include "EC_API/common/data_extractors_cqg.h"
 namespace py = pybind11;
 
+// make_float
+TEST(MakeFloat, HappyPath) {}
 
+// --- get_parsed_rtmd_index_from_policy ---
+TEST(GetParsedRTMDIndexFromPolicy, Pt2ExtractTradeTickCQG) {
+    int res = get_parsed_rtmd_index_from_policy(DataExtractionPolicy::ExtractTradeTickCQG);
+    EXPECT_EQ(res,ParsedRTMDCQG::Quote);
+}
+
+TEST(GetParsedRTMDIndexFromPolicy, Pt2Default) {
+    auto unhandled = static_cast<DataExtractionPolicy>(255);
+    EXPECT_THROW(get_parsed_rtmd_index_from_policy(unhandled), std::invalid_argument);
+}
+
+// extract_trade_tick_CQG
 TEST(ExtractTradeTickCQG, HappyPath) {
     py::tuple quote = py::make_tuple(
         0,                                        // Q_CONTRACT_ID (unused by this fn)
@@ -24,4 +38,10 @@ TEST(ExtractTradeTickCQG, HappyPath) {
     ASSERT_TRUE(result.has_value());
     EXPECT_DOUBLE_EQ(result->price, 1050.0 * 0.01);
 }
+
+// extract_raw_tick
+TEST(ExtractRawTick, Pt2ExtractTradeTickCQG) {}
+
 static py::scoped_interpreter guard{};
+
+
