@@ -23,3 +23,5 @@ std::optional<TradeTick> extract_trade_tick_CQG(const PyObject* quote);
 std::optional<TradeTick> extract_raw_tick(const PyObject* quote, DataExtractionPolicy policy);
 
 int get_parsed_rtmd_index_from_policy(DataExtractionPolicy policy);
+
+double make_float(double significand, double exponent, int sign);
