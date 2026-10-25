@@ -61,7 +61,7 @@ jobs:
         run: ctest --test-dir build
 
       - name: Generate C++ coverage report
-        run: gcovr --root . build --filter --xml-pretty --output coverage_cpp.xml
+        run: gcovr --root . build --filter "EC_API/common/.*" --xml-pretty --output coverage_cpp.xml
 
       - name: Upload to Codecov
         uses: codecov/codecov-action@v4
