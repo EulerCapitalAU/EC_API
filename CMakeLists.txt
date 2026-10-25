@@ -1,6 +1,14 @@
 cmake_minimum_required(VERSION 3.15)
 project(EC_API_cpp_tests LANGUAGES CXX)
 
+
+option(ENABLE_COVERAGE "Build with gcov instrumentation" OFF)
+
+if(ENABLE_COVERAGE)
+    add_compile_options(--coverage -O0 -g)
+    add_link_options(--coverage)
+endif()
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
