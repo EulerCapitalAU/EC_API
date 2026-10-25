@@ -83,6 +83,59 @@ TEST(OHLCVStat, EvictFailEmptyContainer) {
     EXPECT_EQ(snap.volume, 0);
 }
 
+// Sad/edge path: evicting the current HIGH forces a rescan
+TEST(OHLCVStat, EvictRescanHigh) {
+    std::deque<TradeTick> window;
+    OHLCVStat<std::deque<TradeTick>> stat_obj(window, 0.01);
+
+    window.push_back({0.0,100.0,10}); stat_obj.update(window.back());
+    window.push_back({1.0,105.0,5});  stat_obj.update(window.back()); // high=105
+    window.push_back({2.0,102.0,3});  stat_obj.update(window.back()); // low=100
+
+    TradeTick evicted = window[1];        // the 105.0 tick — current high
+    window.erase(window.begin() + 1);
+    stat_obj.evict(evicted);
+
+    OHLCVSnapshot snap = stat_obj.get_snapshot();
+    EXPECT_DOUBLE_EQ(snap.high, 102.0);   // rescanned max of {100, 102}
+    EXPECT_DOUBLE_EQ(snap.low, 100.0);    // untouched: |105-100| > 0.5*tick_size_}
+}
+// Evicting the current LOW forces a rescan
+TEST(OHLCVStat, EvictRescanLow) {
+    std::deque<TradeTick> window;
+    OHLCVStat<std::deque<TradeTick>> stat_obj(window, 0.01);
+
+    window.push_back({0.0,100.0,10}); stat_obj.update(window.back());
+    window.push_back({1.0,105.0,5});  stat_obj.update(window.back()); // high=105
+    window.push_back({2.0,102.0,3});  stat_obj.update(window.back());
+    
+    TradeTick evicted = window.front();   // the 100.0 tick — current low
+    window.pop_front();
+    stat_obj.evict(evicted);
+
+    OHLCVSnapshot snap = stat_obj.get_snapshot();
+    EXPECT_DOUBLE_EQ(snap.low, 102.0);    // rescanned min of {105, 102}
+    EXPECT_DOUBLE_EQ(snap.high, 105.0);   // untouched
+}
+
+// Neither branch should fire: evicting a tick that's neither high nor low
+TEST(OHLCVStat, EvictNoRescanNeeded) {
+    std::deque<TradeTick> window;
+    OHLCVStat<std::deque<TradeTick>> stat_obj(window, 0.01);
+    
+    window.push_back({0.0,100.0,10}); stat_obj.update(window.back());
+    window.push_back({1.0,105.0,5});  stat_obj.update(window.back());
+    window.push_back({2.0,102.0,3});  stat_obj.update(window.back());
+    
+    TradeTick evicted = window[2];        // the 102.0 tick — neither high nor low
+    window.erase(window.begin() + 2);
+    stat_obj.evict(evicted);
+
+    OHLCVSnapshot snap = stat_obj.get_snapshot();
+    EXPECT_DOUBLE_EQ(snap.high, 105.0);   // unchanged
+    EXPECT_DOUBLE_EQ(snap.low, 100.0);    // unchanged
+}
+
 /*---------------------------*/
 //test MomentStat init 
 TEST(MomentStat, InitSuccess) {
@@ -224,9 +277,20 @@ TEST(VWAPStat, EvictSuccess) {
     EXPECT_NEAR(snap.vwap, 102.3750, 1e-4);
 }
 
+// test VWAP Sad Path 
+TEST(VWAPStat, VWAPZeroDivisionFail) {
+    std::deque<TradeTick> window;
+    VWAPStat<std::deque<TradeTick>> stat_obj(window);
+
+    window.push_back({0.0,0.0,0});
+    
+    stat_obj.update(window.back());
+    VWAPSnapshot snap = stat_obj.get_snapshot();
+    EXPECT_TRUE(std::isnan(snap.vwap));
+}
+
 
 //Test init_stats
 TEST(init_stas, Success) {}
 
-//Sad Paths -- Deque init
 
