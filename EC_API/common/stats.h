@@ -55,8 +55,8 @@ struct GreeksSnapshot {};
 /* Stat classes for Stat in DataFeed*/
 class StatBase {
 public:
-    virtual void update(const TradeTick& t) {};
-    virtual void evict(const TradeTick& t) {};
+    virtual void update(const TradeTick& t)=0;
+    virtual void evict(const TradeTick& t)=0;
     virtual py::object to_py_tuple() const {return py::none();}
     virtual ~StatBase() {};
 

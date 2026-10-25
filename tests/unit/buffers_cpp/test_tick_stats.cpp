@@ -3,7 +3,7 @@
 #include "EC_API/common/stats.h"
 #include "EC_API/common/ticks.h"
 
-
+/*---------------------------*/
 //Happy Paths -- Deque init
 //test OHLCV init 
 TEST(OHLCVStat, InitSuccess) {
@@ -64,6 +64,26 @@ TEST(OHLCVStat, EvictSuccess) {
     EXPECT_EQ(snap.volume, 5);
 }
 
+// Sad Paths
+//test OHLCV evict empty guard
+TEST(OHLCVStat, EvictFailEmptyContainer) {
+    //init
+    std::deque<TradeTick> window;
+    OHLCVStat<std::deque<TradeTick>> stat_obj(window, 0.01);
+    
+    TradeTick t = TradeTick({0.0,100.0,10});
+    
+    stat_obj.evict(t); // evict when the container is empty
+
+    OHLCVSnapshot snap = stat_obj.get_snapshot();
+    EXPECT_DOUBLE_EQ(snap.open, 0.0);
+    EXPECT_DOUBLE_EQ(snap.high, std::numeric_limits<double>::lowest());
+    EXPECT_DOUBLE_EQ(snap.low, std::numeric_limits<double>::max());
+    EXPECT_DOUBLE_EQ(snap.close, 0.0);
+    EXPECT_EQ(snap.volume, 0);
+}
+
+/*---------------------------*/
 //test MomentStat init 
 TEST(MomentStat, InitSuccess) {
     std::deque<TradeTick> window;
@@ -74,6 +94,27 @@ TEST(MomentStat, InitSuccess) {
     EXPECT_DOUBLE_EQ(snap.variance,0);
     EXPECT_DOUBLE_EQ(snap.skewness,0);
     EXPECT_DOUBLE_EQ(snap.kurtosis,0);
+}
+
+
+TEST(MomentStat, NonEmptyContainerInitSuccess) {
+    std::deque<TradeTick> window;
+    
+    double price_arr[7] = {100,200,105,114,20,50,32};
+    double vols_arr[7] = {10,46,4,81,5,42,23};
+    
+    for (int i=0; i<7; i++) {
+        window.push_back({static_cast<double>(i), price_arr[i], vols_arr[i]});
+    } 
+    
+    // init when the window is not empty
+    MomentStat<std::deque<TradeTick>> stat_obj(window);
+    // it should contain the same result as in the UpdateSuccess test 
+    MomentSnapshot snap = stat_obj.get_snapshot();
+    EXPECT_NEAR(snap.mean, 88.7143, 1e-4);
+    EXPECT_NEAR(snap.variance, 3264.7755, 1e-4);
+    EXPECT_NEAR(snap.skewness,0.63964, 1e-4);
+    EXPECT_NEAR(snap.kurtosis, 2.5299, 1e-4);
 }
 
 //test MomentStat update
@@ -132,6 +173,18 @@ TEST(VWAPStat, InitSuccess) {
     EXPECT_DOUBLE_EQ(snap.vwap,0);
 }
 
+TEST(VWAPStat, NonEmptyContainerInitSuccess) {
+    std::deque<TradeTick> window;
+    
+    window.push_back({0.0,100.0,10});
+    window.push_back({1.0,105.0,5});
+    window.push_back({2.0,98.0,3});
+    
+    VWAPStat<std::deque<TradeTick>> stat_obj(window);
+    
+    VWAPSnapshot snap = stat_obj.get_snapshot();
+    EXPECT_NEAR(snap.vwap, 101.0556, 1e-4);
+}
 //test VWAPStat update
 TEST(VWAPStat, UpdateSuccess) {
     std::deque<TradeTick> window;
