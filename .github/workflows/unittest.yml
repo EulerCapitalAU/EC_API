@@ -41,7 +41,7 @@ jobs:
         run: conan install ./conanfile.txt --output-folder=build --build=missing
           
       - name: CMake Config
-        run: cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_COVERAGE=ON
+        run: cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Release -DENABLE_COVERAGE=ON
           
       - name: CMake build 
         run: cmake --build build
