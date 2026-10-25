@@ -60,9 +60,12 @@ jobs:
       - name: Run C++ unit tests        
         run: ctest --test-dir build
 
+      - name: Generate C++ coverage report
+        run: gcovr --root . build --filter --xml-pretty --output coverage_cpp.xml
+
       - name: Upload to Codecov
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: coverage.xml
+          files: coverage.xml, coverage_cpp.xml
 
