@@ -27,6 +27,8 @@ include(GoogleTest)
 
 add_library(ec_api_common STATIC
     EC_API/common/data_extractors_cqg.cpp
+    EC_API/common/tick_buffers.cpp
+    EC_API/common/tick_buffers_ext.cpp
     # future production .cpp files land here, once, regardless of how many tests use them
 )
 target_include_directories(ec_api_common PUBLIC ${CMAKE_SOURCE_DIR})
