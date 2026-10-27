@@ -124,14 +124,17 @@ void RingBuffer::reset() {tick_container_.clear();}
 
 TradeTick RingBuffer::lastest() {return tick_container_.back();}
 
+/*Statistical Computation Methods*/
 void RingBuffer::compute_and_update(const TradeTick& tick) {}
 
+/*Tick Advancement Methods*/
 void RingBuffer::add_tick(const TradeTick& tick) {}
 
 void RingBuffer::evict_tick(const double threshold) {}
 
 void RingBuffer::on_tick(const py::object& parsed_rtmd) {}
 
+/* Getter methods for statistics snapshots*/
 py::object RingBuffer::get_stat_snapshot(const StatType& stat_name) const {
     auto* ss = stats_[static_cast<size_t>(stat_name)];
     return ss ? ss->to_py_tuple() : py::none();
@@ -139,5 +142,8 @@ py::object RingBuffer::get_stat_snapshot(const StatType& stat_name) const {
 
 py::object RingBuffer::get_stat_snapshot_batch() const {    
     py::dict out; 
+    for (size_t i = 0; i < stats_.size(); ++i)
+        if (stats_[i])
+            out[py::cast(static_cast<StatType>(i))] = stats_[i]->to_py_tuple();        
     return out;}
 
