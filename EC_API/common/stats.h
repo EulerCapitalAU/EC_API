@@ -68,7 +68,7 @@ class OHLCVStat : public StatBase {
 private:
     ContainerT* container_;
     double tick_size_; // price precision
-    OHLCVSnapshot ohlcv_snapshot;
+    OHLCVSnapshot ohlcv_snapshot{};
 public:      
     OHLCVStat(ContainerT& buf, double tick_size);
     void update(const TradeTick& t) override;
@@ -115,19 +115,21 @@ public:
 template <typename ContainerT>
 class MedianStat : public StatBase {
 private: 
-    ContainerT container_;
+    ContainerT* container_;
     std::priority_queue<double> maxHeap;
     std::priority_queue<double> minHeap;
     double median;
+    MedianSnapshot median_snapshot;
 public:
     MedianStat(ContainerT& buf);
     void update(const TradeTick& t) override;
     void evict(const TradeTick& t) override;
+    MedianSnapshot get_snapshot() const;
+    py::object to_py_tuple() const override;
 
 };
 
 /* Stat classes for Stat in CrossFeed*/
-
 /* setup functions */
 template<typename C>
 void init_stats(

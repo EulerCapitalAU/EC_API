@@ -1,3 +1,4 @@
+/* ------------ OHLCVStat ------------*/
 // OHLCVStat: O(1) for update, O(N) at worst in evict
 template <typename ContainerT>
 OHLCVStat<ContainerT>::OHLCVStat(ContainerT& container, double tick_size):
@@ -49,6 +50,7 @@ py::object OHLCVStat<ContainerT>::to_py_tuple() const {
         ohlcv_snapshot.volume);
     }
 
+/* ------------ MomentStat ------------*/
 // MomentStat: O(1) on both update and evict
 template <typename ContainerT>
 MomentStat<ContainerT>::MomentStat(ContainerT& container):
@@ -110,6 +112,7 @@ py::object MomentStat<ContainerT>::to_py_tuple() const {
     );
 }
 
+/* ------------ VWAPStat ------------*/
 // VWAPStat: O(1) on both update and evict
 template <typename ContainerT>
 VWAPStat<ContainerT>::VWAPStat(ContainerT& container): 
@@ -146,8 +149,37 @@ py::object VWAPStat<ContainerT>::to_py_tuple() const {
         vwap_snapshot.vwap
     );
 }
-/* Stat setup */
-/* SlidingWindowBuffer */
+
+/* ------------ MedianStat ------------*/
+template <typename ContainerT>
+MedianStat<ContainerT>::MedianStat(ContainerT& container):
+    container_{&container},   
+    median{},  
+    maxHeap{},
+    minHeap{},
+    median_snapshot{} {
+        for (const TradeTick& t : *container_)
+            update(t);
+    }
+
+template <typename ContainerT>
+void MedianStat<ContainerT>::update(const TradeTick& t) {}
+
+template <typename ContainerT>
+void MedianStat<ContainerT>::evict(const TradeTick& t) {}
+
+template <typename ContainerT>
+MedianSnapshot MedianStat<ContainerT>::get_snapshot() const {return median_snapshot;}
+
+template <typename ContainerT>
+py::object MedianStat<ContainerT>::to_py_tuple() const {
+    MedianSnapshot median_snapshot = get_snapshot();
+    return py::make_tuple(
+        median_snapshot.median
+    );
+}
+
+/* ============== Stat setup ================ */
 template <typename C>
 void init_stats(
     StatConfig& config, 
@@ -175,9 +207,9 @@ void init_stats(
         active_.push_back(std::move(p_));
         }
     
-    /*if (config.cal_median) {
+    if (config.cal_median) {
         auto p_ = std::make_unique<MedianStat<C>>(tick_container);
         stats_array[static_cast<size_t>(StatType::MEDIAN)] = p_.get();
         active_.push_back(std::move(p_));
-        }*/
+        }
     }
