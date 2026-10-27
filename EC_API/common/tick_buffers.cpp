@@ -64,7 +64,7 @@ void SlidingWindowBuffer::add_tick(const TradeTick& tick) {
     tick_container_.push_back(tick);
     }
 
-void SlidingWindowBuffer::evict_tick(const double threshold) { // loop throigh the front of the container
+void SlidingWindowBuffer::evict_tick(const double threshold) { // loop through the front of the container
     while (!tick_container_.empty() && tick_container_.front().timestamp < threshold) {
         TradeTick evicted_tick = tick_container_.front();
         tick_container_.pop_front();

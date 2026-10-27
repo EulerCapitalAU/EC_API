@@ -25,6 +25,7 @@ struct StatConfig {
     const bool cal_moment = false;
     const bool cal_vwap = false;
     const bool cal_median = false;
+    bool operator==(const StatConfig&) const = default;
 };
 
 /* Snapshots collections */
