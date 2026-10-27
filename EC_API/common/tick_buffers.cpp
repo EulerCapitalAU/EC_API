@@ -8,6 +8,7 @@
 #include "stats.h"
 #include "data_fields_cqg.h"
 #include "data_extractors_cqg.h"
+#include "tick_buffers.h"
 namespace py = pybind11;
 //python setup.py build_ext --inplace
 
@@ -131,7 +132,12 @@ void RingBuffer::evict_tick(const double threshold) {}
 
 void RingBuffer::on_tick(const py::object& parsed_rtmd) {}
 
-py::object RingBuffer::get_stat_snapshot(const StatType& stat_name) const {}
+py::object RingBuffer::get_stat_snapshot(const StatType& stat_name) const {
+    auto* ss = stats_[static_cast<size_t>(stat_name)];
+    return ss ? ss->to_py_tuple() : py::none();
+}
 
-py::object SlidingWindowBuffer::get_stat_snapshot_batch() const {}
+py::object RingBuffer::get_stat_snapshot_batch() const {    
+    py::dict out; 
+    return out;}
 
