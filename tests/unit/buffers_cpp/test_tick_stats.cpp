@@ -290,7 +290,4 @@ TEST(VWAPStat, VWAPZeroDivisionFail) {
 }
 
 
-//Test init_stats
-TEST(init_stas, Success) {}
-
 
