@@ -38,11 +38,11 @@ SlidingWindowBuffer::SlidingWindowBuffer(
 /*Properties method*/ 
 int SlidingWindowBuffer::size() {return tick_container_.size();}
 
-bool SlidingWindowBuffer::empty() {return !tick_container_.empty();}
+bool SlidingWindowBuffer::empty() {return tick_container_.empty();}
 
 void SlidingWindowBuffer::reset() {tick_container_.clear();}
 
-TradeTick SlidingWindowBuffer::lastest() {return tick_container_.back();}
+TradeTick& SlidingWindowBuffer::latest() {return tick_container_.back();}
 
 /*Statistical Computation Methods*/
 void SlidingWindowBuffer::compute_and_update(const TradeTick& tick) {//accumulator calcultator
@@ -122,7 +122,7 @@ bool RingBuffer::empty() {return !tick_container_.empty();}
 
 void RingBuffer::reset() {tick_container_.clear();}
 
-TradeTick RingBuffer::lastest() {return tick_container_.back();}
+TradeTick& RingBuffer::latest() {return tick_container_.back();}
 
 /*Statistical Computation Methods*/
 void RingBuffer::compute_and_update(const TradeTick& tick) {}

@@ -41,7 +41,7 @@ public:
     int size();
     bool empty();
     void reset();
-    TradeTick lastest();
+    TradeTick& latest();
     
     void compute_and_update(const TradeTick& tick);
     void add_tick(const TradeTick& tick);
@@ -80,7 +80,7 @@ public:
     int size();
     bool empty();
     void reset();
-    TradeTick lastest();
+    TradeTick& latest();
     
     void compute_and_update(const TradeTick& tick);
     void add_tick(const TradeTick& tick);

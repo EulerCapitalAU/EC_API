@@ -4,14 +4,19 @@
 
 struct TradeTick {
     double timestamp, price, volume;
+    
+    bool operator==(const TradeTick&) const = default;
     };
 
 struct SpreadTick {
     double timestamp, price_a, price_b, spread;
+    
+    bool operator==(const SpreadTick&) const = default;
     };
 
 struct OHLCVTick {
     double timestamp, open, high, low, close, volume;
+    bool operator==(const OHLCVTick&) const = default;
     };
 
 /*struct BidAskTick {

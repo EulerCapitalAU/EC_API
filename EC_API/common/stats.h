@@ -35,18 +35,23 @@ struct OHLCVSnapshot {
     double low = std::numeric_limits<double>::max();
     double close = 0;
     int volume = 0;
+    bool operator==(const OHLCVSnapshot&) const = default;
+
 };
 
 struct MomentSnapshot {
     double mean = 0, variance = 0, skewness=0, kurtosis=0;
+    bool operator==(const MomentSnapshot&) const = default;
 };
 
 struct VWAPSnapshot {
     double vwap = 0;
+    bool operator==(const VWAPSnapshot&) const = default;
 };
 
 struct MedianSnapshot {
     double median = 0;
+    bool operator==(const MedianSnapshot&) const = default;
 };
 /* CrossFeed SnapShots */
 struct GreeksSnapshot {};
