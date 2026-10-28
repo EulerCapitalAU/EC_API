@@ -122,3 +122,4 @@ TEST(SlidingWindowBuffer, OnTickHappyPath) {
 
     EXPECT_EQ(buf.size(), 2);
 }
+
