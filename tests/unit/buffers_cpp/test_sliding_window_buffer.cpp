@@ -110,16 +110,66 @@ TEST(SlidingWindowBuffer, TickLifeCycle) {
 }
 
 TEST(SlidingWindowBuffer, OnTickHappyPath) {
-    SlidingWindowBuffer buf(DataExtractionPolicy::ExtractTradeTickCQG, 10.0, 0.25,
+    SlidingWindowBuffer buf(DataExtractionPolicy::ExtractTradeTickCQG, 1.5, 0.25,
                              StatConfig{true, false, false, false});
 
     py::object parsed_rtmd = make_parsed_rtmd({
         make_cqg_quote(1.0, 100.0, 9),
         make_cqg_quote(2.0, 114.0, 4),
+        make_cqg_quote(3.0, 90.0, 11),
+        make_cqg_quote(4.0, 103.0, 3),
     });
 
     buf.on_tick(parsed_rtmd);
-
+    
     EXPECT_EQ(buf.size(), 2);
-}
 
+    py::tuple actual = buf.get_stat_snapshot(StatType::OHLCV).cast<py::tuple>();
+    
+    EXPECT_DOUBLE_EQ(actual[0].cast<double>(), 90.0);
+    EXPECT_DOUBLE_EQ(actual[1].cast<double>(), 103.0);
+    EXPECT_DOUBLE_EQ(actual[2].cast<double>(), 90.0);
+    EXPECT_DOUBLE_EQ(actual[3].cast<double>(), 103.0);
+    EXPECT_EQ(actual[4].cast<double>(), 14);
+}
+/*
+TEST(SlidingWindowBuffer, GetSnapshotBatchHappyPath) {
+    SlidingWindowBuffer buf(DataExtractionPolicy::ExtractTradeTickCQG, 10.0, 0.25,
+                             StatConfig{true, true, true, false});
+                             
+    double price_arr[7] = {100,200,105,114,20,50,32};
+    int vols_arr[7] = {10,46,4,81,5,42,23};
+    
+    py::object parsed_rtmd = make_parsed_rtmd({
+        make_cqg_quote(1.0, price_arr[0], vols_arr[0]),
+        make_cqg_quote(2.0, price_arr[1], vols_arr[1]),
+        make_cqg_quote(3.0, price_arr[2], vols_arr[2]),
+        make_cqg_quote(4.0, price_arr[3], vols_arr[3]),
+        make_cqg_quote(5.0, price_arr[4], vols_arr[4]),
+        make_cqg_quote(6.0, price_arr[5], vols_arr[5]),
+        make_cqg_quote(7.0, price_arr[6], vols_arr[6]),
+    });
+
+    buf.on_tick(parsed_rtmd);
+    
+    py::dict actual = buf.get_stat_snapshot_batch();
+    
+    // Check OHLCV
+    py::tuple actual_ohlcv = actual[py::cast(StatType::OHLCV)];
+    EXPECT_NEAR(actual_ohlcv[0].cast<double>(), 100.0, 1e-4);
+    EXPECT_NEAR(actual_ohlcv[1].cast<double>(), 200.0, 1e-4);
+    EXPECT_NEAR(actual_ohlcv[2].cast<double>(), 20.0, 1e-4);
+    EXPECT_NEAR(actual_ohlcv[3].cast<double>(), 32.0, 1e-4);
+    EXPECT_EQ(actual_ohlcv[4].cast<double>(), 211);
+
+    // Check Moment
+    py::tuple actual_moment = actual[py::cast(StatType::MOMENT)];
+    EXPECT_NEAR(actual_moment[0].cast<double>(), 88.7143, 1e-4);
+    EXPECT_NEAR(actual_moment[1].cast<double>(), 3264.7755, 1e-4);
+    EXPECT_NEAR(actual_moment[2].cast<double>(), 0.63964, 1e-4);
+    EXPECT_NEAR(actual_moment[3].cast<double>(), 2.5299, 1e-4);
+
+    // Check VWAP
+    py::tuple actual_vwap = actual[py::cast(StatType::VWAP)];
+    EXPECT_NEAR(actual_vwap[0].cast<double>(), 108.00947867, 1e-4);
+}*/

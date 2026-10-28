@@ -55,21 +55,25 @@ public:
 
 
 /* Fixed-Number entry Tick Buffer */
+inline constexpr std::size_t MaxRingBufferSize = 4096;
+
 class RingBuffer {
 private:
     // Buffer Setups
     DataExtractionPolicy policy_;
     int rtmd_idx;
-    const int buffer_size_;
-    std::vector<TradeTick> tick_container_;  // fixed size, no heap management needed
-    int head_ = 0;
+    const int capacity_;
+    std::array<TradeTick, MaxRingBufferSize> tick_container_;  // fixed size, no heap management needed
+    int head_ = 0; //head index: last index 
+    int tail_ = 0; //tail index: current index
+    int size_ = 0; //total size
     
     // Stats
     StatConfig stat_config; 
     std::vector<StatBase*> stats_;
 
 public:
-    RingBuffer(DataExtractionPolicy policy, int buffer_size);
+    RingBuffer(DataExtractionPolicy policy, int capacity);
 
     /* Disable Move and Copy*/    
     RingBuffer(const RingBuffer&)              = delete;
@@ -78,7 +82,8 @@ public:
     RingBuffer& operator=(RingBuffer&&)       = delete;
 
     int size();
-    bool empty();
+    bool isEmpty();
+    bool isFull();
     void reset();
     TradeTick& latest();
     

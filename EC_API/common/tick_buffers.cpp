@@ -12,6 +12,7 @@
 namespace py = pybind11;
 //python setup.py build_ext --inplace
 
+static TradeTick default_tick{0,0,0,};
 //* -------------------- SldingWindowBuffer -------------------- */
 // Constructor
 SlidingWindowBuffer::SlidingWindowBuffer(
@@ -110,25 +111,47 @@ py::object SlidingWindowBuffer::get_stat_snapshot_batch() const {
 }  
     
 //* -------------------- RingBuffer -------------------- */
-RingBuffer::RingBuffer(DataExtractionPolicy policy, int buffer_size):
+RingBuffer::RingBuffer(DataExtractionPolicy policy, int capacity):
     policy_{policy},
     rtmd_idx{get_parsed_rtmd_index_from_policy(policy)},
-    buffer_size_{buffer_size} {}
+    capacity_{capacity} {
+    }
     
 /*Properties method*/ 
 int RingBuffer::size() {return tick_container_.size();}
 
-bool RingBuffer::empty() {return !tick_container_.empty();}
+bool RingBuffer::isEmpty() {
+    if (size_==0) {return true;}
+    return false;
+}
 
-void RingBuffer::reset() {tick_container_.clear();}
+bool RingBuffer::isFull() {
+    if (size_==capacity_) {return true;}
+    return false;
+}
 
-TradeTick& RingBuffer::latest() {return tick_container_.back();}
+void RingBuffer::reset() {
+    tick_container_.fill(default_tick);
+    head_ = 0; tail_ = 0; size_ = 0;
+}
+
+TradeTick& RingBuffer::latest() {
+    if (isEmpty()){return default_tick;}
+        return tick_container_[(tail_ - 1 + capacity_) % capacity_];
+}
 
 /*Statistical Computation Methods*/
 void RingBuffer::compute_and_update(const TradeTick& tick) {}
 
 /*Tick Advancement Methods*/
-void RingBuffer::add_tick(const TradeTick& tick) {}
+void RingBuffer::add_tick(const TradeTick& tick) {
+    if (!isFull()){
+        tick_container_[tail_] = tick;
+        tail_ = (tail_ + 1) % capacity_;
+        size_+=1;
+    }
+
+}
 
 void RingBuffer::evict_tick(const double threshold) {}
 
