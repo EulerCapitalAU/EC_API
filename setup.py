@@ -11,6 +11,7 @@ ext_modules = [
             ],
         include_dirs=["EC_API/common"], 
         extra_compile_args=["--coverage"],
+        extra_link_args=["--coverage"],
         cxx_std=20,                
     ),
 ]
