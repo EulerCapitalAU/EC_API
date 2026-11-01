@@ -145,12 +145,13 @@ void RingBuffer::compute_and_update(const TradeTick& tick) {}
 
 /*Tick Advancement Methods*/
 void RingBuffer::add_tick(const TradeTick& tick) {
+    tick_container_[tail_] = tick;
+    tail_ = (tail_ + 1) & (capacity_ - 1);
+
     if (!isFull()){
-        tick_container_[tail_] = tick;
-        tail_ = (tail_ + 1) % capacity_;
         size_+=1;
     }
-
+//bitmask (tail_ = (tail_ + 1) & (capacity_ - 1)), capcity has to be divided by 2
 }
 
 void RingBuffer::evict_tick(const double threshold) {}

@@ -25,6 +25,31 @@ def make_parsed_rtmd(quotes: list) -> tuple:
     return (list(quotes), None, None, None)  # [Quote, MarketValue, DetailedDOM, Corrections]
 
 
+
+# ----- Sliding Window Buffer tests -----
+def test_get_snapshot_happy_path() -> None:
+    buf = SlidingWindowBuffer(
+        DataExtractionPolicy.ExtractTradeTickCQG,
+        10.0,  # window
+        0.25,  # tick_size
+        StatConfig(cal_ohlcv=True, cal_moment=True, cal_vwap=True, cal_median=False),
+    )
+    prices = [100, 200, 105, 114, 20, 50, 32]
+    volumes = [10, 46, 4, 81, 5, 42, 23]
+
+    quotes = [
+        make_cqg_quote(float(ts), float(p), float(v))
+        for ts, (p, v) in enumerate(zip(prices, volumes), start=1)
+    ]
+    buf.on_tick(make_parsed_rtmd(quotes))
+
+    mean, variance, skew, kurt = buf.get_stat_snapshot(StatType.MOMENT)
+    assert mean == pytest.approx(88.7143, abs=1e-4)
+    assert variance == pytest.approx(3264.7755, abs=1e-4)
+    assert skew == pytest.approx(0.63964, abs=1e-4)
+    assert kurt == pytest.approx(2.5299, abs=1e-4)
+    
+# ----- get snapshot batch tests -----
 def test_get_snapshot_batch_happy_path() -> None:
     buf = SlidingWindowBuffer(
         DataExtractionPolicy.ExtractTradeTickCQG,

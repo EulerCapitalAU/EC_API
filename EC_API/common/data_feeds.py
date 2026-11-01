@@ -18,7 +18,16 @@ from EC_API.common.tick_buffers_ext import (
 from EC_API.common.tick_buffers_ext import StatConfig as CPPStatConfig
 
 type TickBuffer = Union[SlidingWindowBuffer, RingBuffer]
+
 default_buf = SlidingWindowBuffer(DataExtractionPolicy.ExtractTradeTickCQG, 10.0,0.0)
+
+
+STAT_TYPE_MAP = {
+    "ohlcv": StatType.OHLCV,
+    "moment":StatType.MOMENT,
+    "vwap":StatType.VWAP,
+    "median":StatType.MEDIAN
+  }
 
 class DataFeed:
     """
@@ -41,11 +50,6 @@ class DataFeed:
         tick_buffer: TickBuffer = default_buf,
         stat_config: CPPStatConfig = CPPStatConfig(),
     ):
-        # Buffers
-        #self._ring_price: list = []  # np.ndarray  shape (window,)
-        #self._ring_time: list = []  # np.ndarray  shape (window,)
-        #self._ptr: int = 0
-
         # Configs
         self.stat_config: CPPStatConfig = stat_config
         self.cpp_stat_config = stat_config
@@ -53,6 +57,8 @@ class DataFeed:
 
         self.symbol: str = symbol
         self.stat_snapshot: dict[str,tuple[Any]] = dict() # update
+        
+        
 
         #self.tick_buffer: TickBuffer = tick_buffer
         #self.min_n: int = min_n
@@ -62,12 +68,17 @@ class DataFeed:
         #)
         # ----
         
-    def get_stat_snapshot(self, stat_name: StatType) -> tuple:
-        return self.cpp_buffer.get_stat_snapshot(stat_name)
+    def get_stat_snapshot(self, stat_name: str) -> tuple | None:
+        if STAT_TYPE_MAP.get(stat_name):
+            return self.cpp_buffer.get_stat_snapshot(STAT_TYPE_MAP[stat_name])
+        else: return
             
-    def update(self, raw: tuple) -> None: # main methods to updates all attribute and statistics
+    def get_stat_snapshot_batch(self) -> dict:
+        return self.cpp_buffer.get_stat_snapshot_batch()
+    
+    def on_tick(self, raw: tuple) -> None: # main methods to updates all attribute and statistics
         # add tick, compute new stat, tick eviction
-        self.cpp_buffer.add_tick(raw)
+        self.cpp_buffer.on_tick(raw)
 
 # =============================================================================
 #       def update(self, raw: tuple) -> None:
@@ -110,31 +121,9 @@ class DataFeed:
 #           return self._acc.snapshot()    # returns a NamedTuple, O(1)
 # =============================================================================
 # =============================================================================
-#     @property
-#     def tick_buffer_stat(self): # Only Getter method is needed in this class
-#         print("TICK BUF STAT", self.tick_buffer.buffers, type(self.tick_buffer.buffers))
-#
-#         for buffer_key in self.tick_buffer.buffers:
-#             print("BUF KEY",buffer_key, self.tick_buffer.buffers[buffer_key],
-#                   type(self.tick_buffer.buffers[buffer_key]))
-#             self._tick_buffer_stat[buffer_key] = self.buf_stat_method.compute(
-#                                                  self.tick_buffer.buffers[buffer_key])
-#             return self._tick_buffer_stat
-# buf_stat_method: TickBufferStat = TickBufferStat(
-# buf_stat_method()
-# self._tick_buffer_stat: dict = {}
-# =============================================================================
-# =============================================================================
-#   Strategy side:
-# 
-#   def on_tick(symbol: str) -> None:    # this IS the DataBus callback
-#       snap = feed.snapshot
-#       if snap.vwap > snap.mean_price * 1.002:
-#           ...
-# 
-# 
-# =============================================================================
+
 class CrossFeeds:  # WIP
+
     """
     An Object that process dervied data from more than one DataFeed. For
     example, cross correlation of two different assets.
@@ -144,6 +133,8 @@ class CrossFeeds:  # WIP
 
     def __init__(self):
         self._feeds: dict[str, DataFeed] = dict()
+        
+        self._cross_window = None
 
     def spread(self, a: str, b: str) -> float:
         return
