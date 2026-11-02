@@ -133,7 +133,6 @@ class CrossFeeds:  # WIP
 
     def __init__(self):
         self._feeds: dict[str, DataFeed] = dict()
-        
         self._cross_window = None
 
     def spread(self, a: str, b: str) -> float:

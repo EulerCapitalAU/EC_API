@@ -95,3 +95,10 @@ public:
     py::object get_stat_snapshot(const StatType& stat_name) const;
     py::object get_stat_snapshot_batch() const;
 };
+
+
+/*
+
+CrossWindow
+
+*/
