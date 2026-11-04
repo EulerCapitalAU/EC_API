@@ -185,7 +185,6 @@ class DataEngineCQG:
                 pass # no logging, latency senstivie
 
     def _add_new_data_stream_task(self, out_stream_name: str) -> None:
-
         self._streaming_tasks[out_stream_name] = asyncio.create_task(
             self._initiate_ingestion_loop(out_stream_name)
         )

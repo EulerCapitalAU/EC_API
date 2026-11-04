@@ -1,8 +1,6 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Fri Jul  3 21:08:53 2026
+from EC_API.common.data_feeds import DataFeed
 
-@author: dexter
-"""
-
+class StrategyEngine:
+    def __init__(self):
+        self.datafeeds: dict[str, DataFeed] = dict()
+        ...

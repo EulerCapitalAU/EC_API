@@ -8,3 +8,4 @@ mypy
 ruff
 websockets
 gcovr
+fastapi
