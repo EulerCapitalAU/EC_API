@@ -195,6 +195,15 @@ class TradeEngineController(Controller):
             callback(in_stream_name)
  
 class TradeEngineCQG:
+    """
+    Create tasks that continuously send orders per subscribed symbol by 
+    listening to the in_stream channel. 
+    
+    Engine Async tasks:
+        (1) _send_order_loop (runs _package_and_send, one per symbol trade subscription)
+        (2) _control_loop
+        
+    """
     def __init__(
             self, 
             usr_cfg: str,
@@ -311,7 +320,6 @@ class TradeEngineCQG:
           risk_check = self.PREC # Static risk check done upon creation
           )
         await ExecutePayload(live_order=LiveOrderCQG(self.trade_session)).unload(PL)
-        
         
     def _add_send_task_to_map(self, in_stream_name: str) -> None:
         # For each new in_stream added, make a new async task send_loop
