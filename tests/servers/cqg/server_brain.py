@@ -5,7 +5,8 @@ Created on Mon Oct 12 20:03:21 2026
 
 @author: dexter
 """
-
+import asyncio
+from collections import defaultdict
 from EC_API.ext.WebAPI.webapi_2_pb2 import ServerMsg, ClientMsg
 from EC_API.ext.WebAPI.market_data_2_pb2 import MarketDataSubscription as MktDSub
 from EC_API.ext.common.shared_1_pb2 import OrderStatus
@@ -14,6 +15,7 @@ from EC_API.ext.WebAPI.user_session_2_pb2 import RestoreOrJoinSessionResult as R
 from EC_API.ext.WebAPI.user_session_2_pb2 import LoggedOff as LOff
 from EC_API.ext.WebAPI.webapi_2_pb2 import InformationReport as InfoRp
 from EC_API.connect.cqg.base import ConnectCQG
+from EC_API.transport.routers import StreamRouter
 from tests.unit.fixtures.server_msg_builders_CQG import (
     build_logon_result_server_msg,
     build_logged_off_server_msg,
@@ -27,20 +29,27 @@ from tests.unit.fixtures.server_msg_builders_CQG import (
     build_go_flat_statuses_server_msg
     )
 from tests.servers.brains import ServerBrain
+from tests.servers.tape import SourceTape, GBMTape
+
 
 def client_msg_type(client_msg: ClientMsg) -> list[str]:
     return [fd.name for fd, val in client_msg.ListFields()]
 
-class FakeDataServerBrainCQG(ServerBrain):
+class FakeServerBrainCQG(ServerBrain):
     def __init__(
             self, 
             success_decisions: dict = dict(),
-            extra_instructions: dict = dict()
+            extra_instructions: dict = dict(),
             ):
         # --- Settings
         self.success_decisions = success_decisions # Determine if a response return success or not
         self.extra_instructions = extra_instructions
-                
+        
+        self.tape_registry: dict[int, SourceTape] = defaultdict(SourceTape)
+        self.router = StreamRouter()
+        self._producers_registry: dict[int, asyncio.Task] = dict()
+
+    # ---- The logic for server response ----
     async def response_logic(self, msg: ClientMsg, **kwargs) -> ServerMsg:
         msg_name = client_msg_type(msg)[0] 
         # we assume client dispatch message one at a time
@@ -57,18 +66,21 @@ class FakeDataServerBrainCQG(ServerBrain):
             # ---- Realtime Data ----
             # !!! wip
             case "market_data_subscriptions":
-                await self._mkt_data_status_response(msg)
-                count = 0
+                #await self._mkt_data_status_response(msg)
+                #count = 0
                 #while not self.conn._stop_evt():
-                if self.success_decisions["market_data_subscriptions"]:
-                    while count < 100:
-                        await self._mkt_data_stream_responses(msg)
-                        count+=1
+                #######
+                await self.streaming_data_handle()
+                
+                # spawn the async task
+                # make 
             case _:
                 
                 pass
             
-    # ---- Sessions ----
+            # ---- Trade handling ----
+            
+    # ---------------- Sessions ----------------
     async def _logon_response(self, client_msg: ClientMsg) -> ServerMsg | None:
         if self.success_decisions.get("logon") is not None:
             if self.success_decisions['logon']:
@@ -114,7 +126,7 @@ class FakeDataServerBrainCQG(ServerBrain):
 
             #await self.transport.in_q.put(server_msg)
         
-    # ---- Metadata ----
+    # ---------------- Metadata ----------------
     async def _sym_res_response(self, client_msg: ClientMsg, **kwargs) -> ServerMsg | None:
         if self.success_decisions.get("information_requests") is not None:
             sym = client_msg.information_requests[0].symbol_resolution_request.symbol
@@ -150,7 +162,24 @@ class FakeDataServerBrainCQG(ServerBrain):
         return
         #await self.transport.in_q.put(sym_rp)
         
-    # ---- Realtime Market ----
+    # ---------------- Realtime Market ----------------
+    async def streaming_data_handle(self, client_msg: ClientMsg):
+        if self.success_decisions["market_data_subscriptions"]:
+            for i in range(len(client_msg.market_data_subscriptions)):
+                contract_id = client_msg.market_data_subscriptions[i].contract_id
+                
+
+                # add to tape registry
+                self.tape_registry[contract_id] = None
+                # first send the status response, then send a stream of data
+                self._mkt_data_status_response()
+                # handback an async generator to caller
+
+            
+            # return 
+        else:
+            ...
+        
     async def _mkt_data_status_response(self, client_msg: ClientMsg) -> ServerMsg | None:
         if self.success_decisions.get("market_data_subscriptions") is not None:
             if self.success_decisions["market_data_subscriptions"]:
@@ -171,17 +200,20 @@ class FakeDataServerBrainCQG(ServerBrain):
                         )
                     return mkt_status
         return
-            
+    
     async def _mkt_data_stream_responses(self, client_msg: ClientMsg):
         for mkt_sub in client_msg.market_data_subscriptions:
             server_msg = build_real_time_market_data_server_msg(
                 ServerMsg(),
                 contract_id = mkt_sub.contract_id
                 )
+         
             #await self.transport.in_q.put(server_msg)
             
     async def _unsubscribe_mkt_data_response(self, client_msg: ClientMsg) -> ServerMsg | None:
         if self.success_decisions.get("unsubscribe_mkt_data") is not None:
             ...
         return
+    
+    # ---------------- Trade  ----------------
 

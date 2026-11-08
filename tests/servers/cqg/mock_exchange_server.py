@@ -3,11 +3,12 @@ from typing import Optional, Literal, AsyncIterator, Any
 import websockets
 from websockets.asyncio.server import ServerConnection, OPEN
 from EC_API.ext.WebAPI.webapi_2_pb2 import ServerMsg, ClientMsg
+from EC_API.channel.base import Channel
 from EC_API.transport.routers import StreamRouter
 from tests.servers.tape import SourceTape, GBMTape
 from tests.servers.ws_server_base import WSserver
 from tests.servers.brains import ServerBrain
-from tests.servers.cqg.data_server_brain import FakeDataServerBrainCQG
+from tests.servers.cqg.server_brain import FakeServerBrainCQG
 
 class MsgFormatterCQG:
     def __init__(self):...
@@ -16,29 +17,45 @@ RpcAction = tuple[Literal["rpc"], ServerMsg]
 StreamAction = tuple[Literal["stream"], AsyncIterator[ServerMsg]]
 BrainAction = RpcAction | StreamAction
 
-class FakeExchangeDataServerCQG:
+class FakeExchangeServerCQG:
+    """ 
+    
+    Data Streaming: 
+    Trade Handling
+    """
     def __init__(
             self, 
-            host: int, port: int,
-            #ws_server: WSserver,
-            tape: SourceTape,
+            data_host: int, data_port: int,
+            trade_host: int, trade_port: int,
+            #tape: SourceTape,
             brain: ServerBrain,
             data_params: dict[str, Any]
         ):
-        self.tape: Optional[SourceTape] = tape
+        
+        # --- Brain parameters
         self.brain: Optional[ServerBrain] = brain
+        
+        self.tapes: dict[int, SourceTape] = dict()
+        #self.tape: Optional[SourceTape] = tape
         self.data_params: dict[str, Any] = data_params
 
-        self.ws_server: WSserver = WSserver(host, port, self.handler)
+        # --- Websocket server 
+        self.ws_data_server: WSserver = WSserver(data_host, data_port, self.handler)
+        self.ws_trade_server: WSserver = WSserver(trade_host, trade_port, self.handler)
+        self.all_connections: list[ServerConnection] = list()
         
+        # Server Engine container
         self.router = StreamRouter()
-        self.producers_registry: dict[int, asyncio.Task] = dict()
+        self._producers_registry: dict[int, asyncio.Task] = dict()
         self.stop_evt: asyncio.Event = asyncio.Event()
         self.interval: int = 10
         
-    async def response_logic(self, msg: ClientMsg, **kwargs):
-        return await self.brain.response_logic(msg, **kwargs)
-    
+    # ---- properties
+    @property
+    def connections(self) -> set[ServerConnection]:
+        return {c for c in self.all_connections if c.protocol.state is OPEN}
+        
+    # ---- Websocket related functions
     async def handler(self, conn: ServerConnection):
         # !!! rework the split 
         while not self.stop_evt.is_set():
@@ -50,7 +67,24 @@ class FakeExchangeDataServerCQG:
             except websockets.exceptions.ConnectionClosed:
                 break
             
-    # --- Streaming
+    # ---- Brain related functions
+    async def response_logic(self, msg: ClientMsg, **kwargs):
+        return await self.brain.response_logic(msg, **kwargs)
+       
+    # -------- Data Server Streaming --------
+    async def _stream_producer_task(self, contract_id:int, tape: SourceTape):
+        # read tape, put the data into the stream queue (_subs)
+        for tick in tape.replay():
+            await self.router.publish(contract_id, tick)
+            await asyncio.sleep(self.interval)                 # <-- yields control here
+            if contract_id not in self.router._subs:      # checked AFTER an await
+                break
+        del self._producers_registry[contract_id]
+        
+    async def _stream_consumer_send_task(self, sub_id):...
+        # read the sub_id, send it out to subscribers 
+        #await conn.send()
+        
     def spawn_stream(self, contract_id: int): 
         gmb_tape = GBMTape(
             1034, 
@@ -60,7 +94,7 @@ class FakeExchangeDataServerCQG:
             self.data_params['sigma']
         )
         
-        asyncio.create_task(self.stream_producer_task(contract_id, gmb_tape))
+        self._producers_registry[contract_id] = asyncio.create_task(self.stream_producer_task(contract_id, gmb_tape))
         asyncio.create_task(self.stream_consumer_send_task(contract_id))
     
     def despawn_stream(self, contract_id:int, queue:asyncio.Queue):
@@ -71,30 +105,16 @@ class FakeExchangeDataServerCQG:
             if task is not None:
                 task.cancel()
                 
-    async def stream_producer_task(self, contract_id:int, tape: SourceTape):
-        # read tape, put the data into the stream queue
-        for tick in tape.replay():
-            await self.router.publish(contract_id, tick)
-            await asyncio.sleep(self.interval)                 # <-- yields control here
-            if contract_id not in self.router._subs:      # checked AFTER an await
-                break
-        del self._producers[contract_id]
-        
-    async def stream_consumer_send_task(self, sub_id):...
-        # read the sub_id, send it out to subscribers 
-        #await conn.send()
+    # -------- Trade Server --------
 
-
-    # --- Lifecycle
-    @property
-    def connections(self) -> set[ServerConnection]:
-        return {c for c in self.all_connections if c.protocol.state is OPEN}
-    
+    # --- Lifecycle    
     async def start(self):
         # initialise WS server layer
         await self.ws_server.start()
         
         # inintialise Server Brain
+        
+        # setup Data Stream parameters
         
     async def stop(self):
         await self.ws_server.stop()
