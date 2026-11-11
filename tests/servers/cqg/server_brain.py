@@ -1,12 +1,8 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Oct 12 20:03:21 2026
-
-@author: dexter
-"""
 import asyncio
 from collections import defaultdict
+from typing import Any
+import logging
+
 from EC_API.ext.WebAPI.webapi_2_pb2 import ServerMsg, ClientMsg
 from EC_API.ext.WebAPI.market_data_2_pb2 import MarketDataSubscription as MktDSub
 from EC_API.ext.common.shared_1_pb2 import OrderStatus
@@ -31,6 +27,8 @@ from tests.unit.fixtures.server_msg_builders_CQG import (
 from tests.servers.brains import ServerBrain
 from tests.servers.tape import SourceTape, GBMTape
 
+logger = logging.getLogger(__name__)
+
 
 def client_msg_type(client_msg: ClientMsg) -> list[str]:
     return [fd.name for fd, val in client_msg.ListFields()]
@@ -45,9 +43,18 @@ class FakeServerBrainCQG(ServerBrain):
         self.success_decisions = success_decisions # Determine if a response return success or not
         self.extra_instructions = extra_instructions
         
+        # ----- Data Server
+        self.data_stream_router: StreamRouter = StreamRouter() # tick data
+        
         self.tape_registry: dict[int, SourceTape] = defaultdict(SourceTape)
-        self.router = StreamRouter()
-        self._producers_registry: dict[int, asyncio.Task] = dict()
+        self._data_producers_registry: dict[int, asyncio.Task] = dict()
+
+        # ----- Trade Server
+        self.trade_stream_router: StreamRouter = StreamRouter()
+
+        self.order_registry: dict[int, Any] = None # (order_id, quote)
+        self._order_matching_registry: dict[int, asyncio.Task] = dict()
+        
 
     # ---- The logic for server response ----
     async def response_logic(self, msg: ClientMsg, **kwargs) -> ServerMsg:
@@ -70,15 +77,18 @@ class FakeServerBrainCQG(ServerBrain):
                 #count = 0
                 #while not self.conn._stop_evt():
                 #######
-                await self.streaming_data_handle()
+                return await self.streaming_data_handle(msg)
                 
                 # spawn the async task
                 # make 
-            case _:
+            # ---- Trade handling ----
+            case "":
+                ...
                 
+            case _:
+                logger.warning()
                 pass
             
-            # ---- Trade handling ----
             
     # ---------------- Sessions ----------------
     async def _logon_response(self, client_msg: ClientMsg) -> ServerMsg | None:
@@ -163,18 +173,42 @@ class FakeServerBrainCQG(ServerBrain):
         #await self.transport.in_q.put(sym_rp)
         
     # ---------------- Realtime Market ----------------
+    async def create_data_stream(self, contract_id: int) -> asyncio.Queue[Any]:
+        try:
+            seed, s, scale, mu, sigma = None
+    
+            gbm_tape = GBMTape(seed, s, scale, mu, sigma)
+            self.tape_registry[contract_id] = gbm_tape
+            self.producers_registry[contract_id] = asyncio.create_task(
+                self.stream_producer_task(contract_id, gbm_tape)
+                )
+            #asyncio.create_task(self.stream_consumer_send_task(contract_id))
+            return self.data_stream_router.subscribe(contract_id)
+        finally:
+            return
+    
+    async def _stream_producer_task(self, contract_id:int, tape: SourceTape):
+        # read tape, put the data into the stream queue (_subs)
+        for tick in tape.replay():
+            await self.router.publish(contract_id, tick)
+            await asyncio.sleep(self.interval)                 # <-- yields control here
+            if contract_id not in self.router._subs:      # checked AFTER an await
+                break
+        del self._producers_registry[contract_id]
+
+
     async def streaming_data_handle(self, client_msg: ClientMsg):
         if self.success_decisions["market_data_subscriptions"]:
             for i in range(len(client_msg.market_data_subscriptions)):
                 contract_id = client_msg.market_data_subscriptions[i].contract_id
                 
-
-                # add to tape registry
-                self.tape_registry[contract_id] = None
+                q = await self.create_data_stream(contract_id)
+                
                 # first send the status response, then send a stream of data
-                self._mkt_data_status_response()
+                status_response = await self._mkt_data_status_response(client_msg)
+                self.data_server_out_queue.put_nowait(status_response)
+                
                 # handback an async generator to caller
-
             
             # return 
         else:

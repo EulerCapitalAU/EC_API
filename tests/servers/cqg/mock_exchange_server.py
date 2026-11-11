@@ -19,9 +19,14 @@ BrainAction = RpcAction | StreamAction
 
 class FakeExchangeServerCQG:
     """ 
+    One connection, one pair of send+recv loop
+    
+    One symbol subscription, one drain task.
+    
+    Drain task read the queue in the stream router and put the data in the out_queue
     
     Data Streaming: 
-    Trade Handling
+    Trade Handling:
     """
     def __init__(
             self, 
@@ -44,9 +49,17 @@ class FakeExchangeServerCQG:
         self.ws_trade_server: WSserver = WSserver(trade_host, trade_port, self.handler)
         self.all_connections: list[ServerConnection] = list()
         
-        # Server Engine container
-        self.router = StreamRouter()
-        self._producers_registry: dict[int, asyncio.Task] = dict()
+        # Server Engine containers
+        self.data_server_out_queue: asyncio.Queue[ServerMsg] = asyncio.Queue()
+        self.trade_server_out_queue: asyncio.Queue[ServerMsg] = asyncio.Queue()
+
+        #self.router = StreamRouter()
+        #self._producers_registry: dict[int, asyncio.Task] = dict()
+        
+        # async management
+        self.data_tg: asyncio.TaskGroup = asyncio.TaskGroup()
+        self.trade_tg: asyncio.TaskGroup = asyncio.TaskGroup()
+        
         self.stop_evt: asyncio.Event = asyncio.Event()
         self.interval: int = 10
         
@@ -71,43 +84,68 @@ class FakeExchangeServerCQG:
     async def response_logic(self, msg: ClientMsg, **kwargs):
         return await self.brain.response_logic(msg, **kwargs)
        
-    # -------- Data Server Streaming --------
-    async def _stream_producer_task(self, contract_id:int, tape: SourceTape):
-        # read tape, put the data into the stream queue (_subs)
-        for tick in tape.replay():
-            await self.router.publish(contract_id, tick)
-            await asyncio.sleep(self.interval)                 # <-- yields control here
-            if contract_id not in self.router._subs:      # checked AFTER an await
-                break
-        del self._producers_registry[contract_id]
-        
-    async def _stream_consumer_send_task(self, sub_id):...
-        # read the sub_id, send it out to subscribers 
-        #await conn.send()
-        
-    def spawn_stream(self, contract_id: int): 
-        gmb_tape = GBMTape(
-            1034, 
-            self.data_params['s'], 
-            self.data_params['scale'], 
-            self.data_params['mu'], 
-            self.data_params['sigma']
-        )
-        
-        self._producers_registry[contract_id] = asyncio.create_task(self.stream_producer_task(contract_id, gmb_tape))
-        asyncio.create_task(self.stream_consumer_send_task(contract_id))
-    
-    def despawn_stream(self, contract_id:int, queue:asyncio.Queue):
-        self.router.unsubscribe(contract_id, queue)          
-        # sync — removes queue, deletes 
-        if contract_id not in self.router._subs:
-            task = self._producers.pop(contract_id, None)
-            if task is not None:
-                task.cancel()
-                
+    # -------- Data Server Streaming --------   
+    async def data_handle(self): ...
+             
+    async def _drain_data(self, contract_id, out_queue):
+        # Put data from stream router to out_queue
+        ...
     # -------- Trade Server --------
+    async def _drain_trade(self, contract_id, out_queue):
+        # Put trade from stream router to out_queue
+        ...
 
-    # --- Lifecycle    
+    # --------- Control ---------
+    # ----- Data Server ----
+    async def _data_server_recv_loop(
+        self, 
+        conn, 
+        out_queue, 
+        tg, 
+        writer_task, 
+        session_id
+    ): 
+        tasks: dict[int, asyncio.Task] = {}
+        try:
+           async for raw in conn:               
+               # WS recv with raw formats
+               raw = await conn.recv() # WS recv()
+               
+               msg = ClientMsg() # make it into a client msg format
+               msg.ParseFromString(raw)
+               
+               server_msg = await self.brain.response_logic(msg)
+               
+               if server_msg is not None:
+                   await self.data_server_out_queue.put(
+                       server_msg.SeralizeToString()
+                       )
+               # Check for market_subscription
+        except: ...
+        finally:...
+           
+    async def _data_server_send_loop(self, conn):
+        tasks: dict[int, asyncio.Task] = {}
+        while not self.stop_evt():
+            try:
+                if not self.data_server_out_queue.empty():
+                    msg = await self.data_server_out_queue.get()
+                    await conn.send(msg)                
+            except:...
+            
+    # ----- Trade Server ----
+    async def _trade_server_recv_loop(
+        self, conn, out_queue, tg, writer_task, session_id
+    ):
+        try:
+           async for raw in conn:
+               ...
+        finally:...
+        
+    async def _trade_server_send_loop(self):...
+
+
+    # --------- Lifecycle ---------
     async def start(self):
         # initialise WS server layer
         await self.ws_server.start()
@@ -116,5 +154,9 @@ class FakeExchangeServerCQG:
         
         # setup Data Stream parameters
         
+        # spawn loops
+        
     async def stop(self):
         await self.ws_server.stop()
+        
+        # cancel all tasks
