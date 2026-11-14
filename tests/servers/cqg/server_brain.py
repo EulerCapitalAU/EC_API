@@ -13,12 +13,19 @@ from EC_API.ext.WebAPI.webapi_2_pb2 import InformationReport as InfoRp
 from EC_API.connect.cqg.base import ConnectCQG
 from EC_API.transport.routers import StreamRouter
 from tests.unit.fixtures.server_msg_builders_CQG import (
+    # --- Session + Metadatat
     build_logon_result_server_msg,
     build_logged_off_server_msg,
     build_restore_or_join_session_result_server_msg,
+    build_ping_server_msg,
+    build_pong_server_msg,
     build_symbol_resolution_report_server_msg,
+    # ---- market data
     build_market_data_subscription_statuses_server_msg,
     build_real_time_market_data_server_msg,
+    # --- Trade
+    build_trade_subscription_statuses_server_msg,
+    build_trade_snapshot_completions_server_msg,
     build_order_statuses_server_msg,
     build_order_request_rejects_server_msg,
     build_order_request_acks_server_msg,
@@ -43,6 +50,8 @@ class FakeServerBrainCQG(ServerBrain):
         self.success_decisions = success_decisions # Determine if a response return success or not
         self.extra_instructions = extra_instructions
         
+        self.server_msg_id: int = 0
+        
         # ----- Data Server
         self.data_stream_router: StreamRouter = StreamRouter() # tick data
         
@@ -66,13 +75,24 @@ class FakeServerBrainCQG(ServerBrain):
                 return await self._logon_response(msg)
             case "logoff":
                 return await self._logoff_response(msg)
+            
+            case "restore_or_join_session":
+                return await self._restore_response(msg)
+            
+            case "ping":
+                return await self._pong_respinse(msg)
+            
+            case "pong":
+                return 
+            
             # ---- Metadata ----
-            case "information_requests": # In this context
+            case "information_requests": 
                 return await self._sym_res_response(msg, **kwargs)
                  
             # ---- Realtime Data ----
             # !!! wip
             case "market_data_subscriptions":
+                # two branches, sub/unsubs
                 #await self._mkt_data_status_response(msg)
                 #count = 0
                 #while not self.conn._stop_evt():
@@ -82,9 +102,25 @@ class FakeServerBrainCQG(ServerBrain):
                 # spawn the async task
                 # make 
             # ---- Trade handling ----
-            case "":
-                ...
-                
+            case "trade_subscriptions":...
+            
+            case "order_requests":
+                if self.success_decisions.get('new_order_request'):
+                    await self._new_order_request_response(msg)
+                if self.success_decisions.get('modify_order_request'):
+                    await self._modify_order_request_response(msg)
+                if self.success_decisions.get('cancel_order_request'):
+                    await self._cancel_order_request_response(msg)
+                if self.success_decisions.get('activate_order_request'):
+                    await self._activate_order_request_response(msg)
+                if self.success_decisions.get('cancelall_order_request'):
+                    await self._cancelall_order_request_response(msg)
+                if self.success_decisions.get('liquidateall_order_request'):
+                    await self._liquidateall_order_request_response(msg)
+                if self.success_decisions.get('goflat_order_request'):
+                    await self._goflat_order_request_response(msg)        
+                    
+            # ---- -------- ----
             case _:
                 logger.warning()
                 pass
@@ -109,14 +145,6 @@ class FakeServerBrainCQG(ServerBrain):
 
             #await self.transport.in_q.put(server_msg)
         
-    async def _restore_response(self, client_msg: ClientMsg) -> ServerMsg | None:
-        if self.success_decisions.get("restore") is not None:
-            if self.success_decisions['restore']:
-                server_msg = build_restore_or_join_session_result_server_msg(
-                    ServerMsg()                    
-                    )
-                return server_msg
-        return
 
     async def _logoff_response(self, client_msg: ClientMsg) -> ServerMsg | None:
         if self.success_decisions.get("logoff") is not None:
@@ -135,7 +163,27 @@ class FakeServerBrainCQG(ServerBrain):
         return
 
             #await self.transport.in_q.put(server_msg)
+            
+    async def _restore_response(self, client_msg: ClientMsg) -> ServerMsg | None:
+        if self.success_decisions.get("restore") is not None:
+            if self.success_decisions['restore']:
+                server_msg = build_restore_or_join_session_result_server_msg(
+                    ServerMsg()                    
+                    )
+                return server_msg
+        return
         
+    async def _ping_response(self, client_msg: ClientMsg) -> ServerMsg | None:
+        return build_ping_server_msg(ServerMsg(), token= "")
+
+
+    async def _pong_response(self, client_msg: ClientMsg) -> ServerMsg | None:
+        return build_pong_server_msg(
+                    ServerMsg(), token = client_msg.ping.token,
+                    ping_time = client_msg.ping.ping_utc_time,
+                    delay = 4
+                    )
+    
     # ---------------- Metadata ----------------
     async def _sym_res_response(self, client_msg: ClientMsg, **kwargs) -> ServerMsg | None:
         if self.success_decisions.get("information_requests") is not None:

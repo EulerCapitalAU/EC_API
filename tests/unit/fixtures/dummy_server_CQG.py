@@ -58,11 +58,15 @@ class FakeDataServerCQG:
             case "logoff":
                 await self._logoff_response(msg)
             # ---- Metadata ----
-            case "information_requests": # In this context
+            case "information_requests": 
+            
                 await self._sym_res_response(msg, **kwargs)
                  
             # ---- Realtime Data ----
             case "market_data_subscriptions":
+                
+                # sub vs unsub: two branches
+                
                 await self._mkt_data_status_response(msg)
                 count = 0
                 #while not self.conn._stop_evt():
