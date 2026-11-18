@@ -1,0 +1,9 @@
+<div>
+  {% if symbols %}
+    {% for s in symbols %}
+      <span class="pill">{{ s }}</span>
+    {% endfor %}
+  {% else %}
+    <div class="muted">No active symbols</div>
+  {% endif %}
+</div>

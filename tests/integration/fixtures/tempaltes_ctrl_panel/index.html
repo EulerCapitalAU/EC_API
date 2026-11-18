@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>EC Control Panel</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <style>
+    :root {
+      --bg: #0b0f17; --panel: #111827; --panel-2: #0f172a; --border: #1f2937;
+      --text: #e5e7eb; --muted: #94a3b8; --accent: #60a5fa; --danger: #f87171;
+      --pill-bg: #1e293b; --pill-bd: #334155; --input-bg: #0b1220; --input-bd: #23324a;
+      --radius: 14px; --radius-sm: 10px; --gap: 14px;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      background: radial-gradient(1200px 800px at 10% -10%, #0f172a 0%, #0b0f17 45%, #090d14 100%);
+      color: var(--text);
+    }
+    header {
+      display: flex; justifyn-items: center;
+      padding: 14px 20px; border-bottom: 1px solid var(--border);
+      background: rgba(9,13,r(6px);
+    }
+    .title { font-size: 17px
+    .muted { color: var(--muted); font-size: 13px; }
+    input, select, textarea,
+      color: var(--text); background: var(--input-bg);
+      border: 1px solid var(ar(--radius-sm); padding: 9px 12px;
+      font-size: 14px;
+    }
+    button { cursor: pointer
+    button:hover { filter: brightness(1.15); }
+    button:active { transfor
+    .btn-accent { border-color: #3b82f6; box-shadow: inset 0 0 0 1px
+rgba(59,130,246,.3); }
+    .btn-danger { border-color: #ef4444; box-shadow: inset 0 0 0 1px
+rgba(239,68,68,.35); }
+
+    .app { display: grid; grr; min-height: calc(100vh -57px); }
+    .tab-radio { display: no
+
+    .sidebar {
+      border-right: 1px solid var(--border); padding: 18px 10px;
+      display: flex; flex-di
+    }
+    .tab-label {
+      display: block; padding: 10px 14px; border-radius: var(--radius-sm);
+      color: var(--muted); cpx; user-select: none;
+    }
+    .tab-label:hover { backg var(--text); }
+
+    .content { padding: 20px
+    .tab-panel { display: none; grid-template-columns: 1fr 360px; gap: var(--gap); }
+
+    #tab-data:checked ~ .sidebar label[for="tab-data"],
+    #tab-trade:checked ~ .si
+    #tab-monitor:checked ~ .sidebar label[for="tab-monitor"] {
+      background: var(--pane-shadow: inset 2px 0 0var(--accent);
+    }
+    #tab-data:checked ~ .content #panel-data,
+    #tab-trade:checked ~ .co
+    #tab-monitor:checked ~ .content #panel-monitor { display: grid; }
+
+    .panel {
+      background: linear-graar(--panel-2));
+      border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 16px; margin-
+    }
+    .panel h2 { margin: 0 0 eight: 600; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .col { display: flex; flx; }
+    .pill {
+      display: inline-flex; ;
+      background: var(--pill-bg); border: 1px solid var(--pill-bd);
+      border-radius: 999px; x 5px 0 0; font-size: 12px;
+    }
+    .observe {
+      border: 1px dashed var(--border); border-radius: var(--radius);
+      padding: 14px; min-heicolor: var(--muted);
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .observe h3 { margin: 0; font-size: 13px; color: var(--text); font-weight: 600; }
+    .observe .placeholder { -items: center;justify-content: center; text-align: center; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="title">EC Co
+    <input id="apiKey" value="{{ api_key_prefill }}" placeholder="X-API-Key"
+style="min-width:220px;" />
+  </header>
+
+  <input type="radio" name="tab" id="tab-data" class="tab-radio" checked>
+  <input type="radio" name="b-radio">
+  <input type="radio" name="tab" id="tab-monitor" class="tab-radio">
+
+  <div class="app">
+    <nav class="sidebar">
+      <label for="tab-data" class="tab-label">Data Engine</label>
+      <label for="tab-trade"ne</label>
+      <label for="tab-monitor" class="tab-label">Monitor Engine</label>
+    </nav>
+
+    <main class="content">
+      <!-- ===== DATA ENGINE ===== -->
+      <section id="panel-dat
+        <div>
+          <div class="panel"
+            <h2>Engine Control</h2>
+            <div class="row"
+              <button class="btn-accent" hx-post="/action/cmd/freeze_data_engine"
+                hx-headers='document.getElementById("apiKey").value}'>Freeze</button>
+              <button class=/cmd/unfreeze_data_engine"
+                hx-headers='js:{"X-API-Key":
+document.getElementById("apin>
+              <button class="btn-danger" hx-post="/action/cmd/shutdown_data_engine"
+                hx-headers='document.getElementById("apiKey").value}'>Shutdown</button>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h2>Data Feeds</
+            <form class="col">
+              <input name="sT,NATGAS" />
+              <div class="row">
+                <button clashx-post="/action/datafeeds/add"
+                  hx-target=
+                  hx-headers='js:{"X-API-Key":
+document.getElementById("api
+                <button class="btn-accent" type="submit"
+hx-post="/action/datafeeds/r
+                  hx-target="#feeds-list"
+                  hx-headersdocument.getElementById("apiKey").value}'>Remove</button>
+                <button clashx-post="/action/datafeeds/remove_all"
+                  hx-target=
+                  hx-headers='js:{"X-API-Key":
+document.getElementById("apiton>
+              </div>
+            </form>
+            <div id="feeds-list" hx-get="/ui/feeds" hx-trigger="load"
+              hx-headers='jsdocument.getElementById("apiKey").value}'></div>
+          </div>
+        </div>
+
+        <div class="observe">
+          <h3>Live Tick Feed
+          <div class="placeholder">WS feed not wired yet — reserved for streaming tick
+data.</div>
+        </div>
+      </section>
+
+      <!-- ===== TRADE ENGIN
+      <section id="panel-trade" class="tab-panel">
+        <div>
+          <div class="panel">
+            <h2>Engine Contr
+            <div class="row">
+              <button class=/cmd/freeze_trade_engine"
+                hx-headers='js:{"X-API-Key":
+document.getElementById("api
+              <button class="btn-accent" hx-post="/action/cmd/unfreeze_trade_engine"
+                hx-headers='document.getElementById("apiKey").value}'>Unfreeze</button>
+              <button class=/cmd/shutdown_trade_engine"
+                hx-headers='js:{"X-API-Key":
+document.getElementById("apin>
+            </div>
+          </div>
+
+          <div class="panel"
+            <h2>Risk Control</h2>
+            <div class="row"
+              <button class="btn-danger" hx-post="/action/cmd/goflat"
+hx-target="#flash"
+                hx-headers='js:{"X-API-Key":
+document.getElementById("api>
+              <button class="btn-danger" hx-post="/action/cmd/cancelall"
+hx-target="#flash"
+                hx-headers='js:{"X-API-Key":
+document.getElementById("apiton>
+            </div>
+            <div id="flash">
+          </div>
+        </div>
+
+        <div class="observe"
+          <h3>Order Confirmations</h3>
+          <div class="placeh reserved for live order/fill confirmations.</div>
+        </div>
+      </section>
+
+      <!-- ===== MONITOR ENGINE ===== -->
+      <section id="panel-mon
+        <div>
+          <div class="panel"
+            <h2>Engine Control</h2>
+            <div class="row"
+              <button class="btn-accent" hx-post="/action/cmd/freeze_monitor_engine"
+                hx-headers='document.getElementById("apiKey").value}'>Freeze</button>
+              <button class=/cmd/unfreeze_monitor_engine"
+                hx-headers='js:{"X-API-Key":
+document.getElementById("apin>
+              <button class="btn-danger" hx-post="/action/cmd/shutdown_monitor_engine"
+                hx-headers='document.getElementById("apiKey").value}'>Shutdown</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="observe"
+          <h3>Engine Status</h3>
+          <div class="placehngine health/metrics.</div>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>
