@@ -1,5 +1,5 @@
 [host_name]
-URL = "redis://localhost:16379"
+URL = "redis://redis:6379"
 
 [control_panel_streams]
 in_streams = [] # to be added dynamically, e.g. mkd_data:WTI:OHLCV, order_statusLWTI
