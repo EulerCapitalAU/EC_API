@@ -51,9 +51,17 @@ STORE = None
 
 # ----- Control Functions
 class ControlPanel:
-    def __init__(self):
-        self.channel: Channel = None
-        self.out_stream: str = None
+    def __init__(self, channel_cfg_addr:str):
+        self.channel: Channel = RedisChannel(
+            channel_cfg_addr, 
+            service_tag="control_panel_streams"
+            )
+        #self.out_streams: list[str] = None
+        
+        # --- stream tags
+        self.CMD_CRTL_trade_engine: str = "CMD:TradeEngineCQG"
+        self.CMD_CRTL_data_engine: str = "CMD:DataEngineCQG"
+        self.CMD_CRTL_monitor_engine: str = "CMD:MonitorEngine"
         
     # ------ Control Panel internal functions ------
     # --- the dispatch function 
@@ -66,18 +74,79 @@ class ControlPanel:
     def _read_datafeed_snapshot(self) -> None:...
     
     # ------ Trade Engine functions ------
-    async def freeze_trade_engine(self) -> None:...
-    async def wake_trade_engine(self) -> None:...
-    async def run_trade_engine(self) -> None:...
+    async def add_stream_trade_engine(self, stream_name: str) -> None: 
+        await self.channel.broadcast(
+            ("CMD:add_stream", stream_name), 
+            self.CMD_CRTL_trade_engine
+            )
+        
+    async def remove_stream_trade_engine(self, stream_name:str) -> None: 
+        await self.channel.broadcast(
+            ("CMD:remove_stream", stream_name), 
+            self.CMD_CRTL_trade_engine
+            )
+        
+    async def freeze_trade_engine(self) -> None:
+        await self.channel.broadcast(
+            ("CMD:freeze_engine", ""), 
+            self.CMD_CRTL_trade_engine
+            )
 
-    async def send_cancelall_order(self) -> None:...
-    async def send_goflat_order(self) -> None:...
+    async def wake_trade_engine(self) -> None:
+        await self.channel.broadcast(
+            ("CMD:unfreeze_engine", ""), 
+            self.CMD_CRTL_trade_engine
+            )
+
+    async def shutdown_trade_engine(self) -> None:
+        await self.channel.broadcast(
+            ("CMD:shutdown_engine", ""), 
+            self.CMD_CRTL_trade_engine
+            )
+
+    async def send_cancelall_order(self) -> None:
+        await self.channel.broadcast(
+            ("CMD:cancel_all_request", ""), 
+            self.CMD_CRTL_trade_engine
+            )
+
+    async def send_goflat_order(self) -> None:
+        await self.channel.broadcast(
+            ("CMD:goflat_request", ""), 
+            self.CMD_CRTL_trade_engine
+            )
     
     # ------ Data Engine functions ------
-    async def freeze_data_engine(self) -> None:...
-    async def wake_data_engine(self) -> None:...
-    async def run_data_engine(self) -> None:...
-
+    async def add_stream_data_engine(self, stream_name: str) -> None:
+        await self.channel.broadcast(
+            ("CMD:add_stream", stream_name), 
+            self.CMD_CRTL_data_engine
+            )
+        
+    async def remove_stream_data_engine(self, stream_name: str) -> None:
+        await self.channel.broadcast(
+            ("CMD:remove_stream", stream_name), 
+            self.CMD_CRTL_data_engine
+            )
+    
+    async def freeze_data_engine(self) -> None:
+        await self.channel.broadcast(
+            ("CMD:freeze_engine", ""), 
+            self.CMD_CRTL_data_engine
+            )
+        
+    async def wake_data_engine(self) -> None:
+        await self.channel.broadcast(
+            ("CMD:unfreeze_engine", ""), 
+            self.CMD_CRTL_data_engine
+            )
+        
+    async def shutdown_data_engine(self) -> None:
+        await self.channel.broadcast(
+            ("CMD:shutdown_engine", ""), 
+            self.CMD_CRTL_data_engine
+            )
+        
     async def add_datafeed(self, symbol: str) -> None: ...
     async def remove_datafeed(self, symbol: str) -> None: ...
     async def remove_all_datafeeds(self): ...
@@ -100,7 +169,7 @@ class ControlPanel:
     
     async def set_datafeeds_config(self) -> None:...
 
-
+CrtlPanel = ControlPanel()
 # ----- Control Panel Layout
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
@@ -124,6 +193,18 @@ async def ui_feeds(request: Request):
         {"request": request, "symbols": feeds}
     )
 # ----- Trade Engine -----
+@app.post("/action/cmd/freeze_trade_engine", response_class=HTMLResponse, dependencies=[Depends(require_api_key)])
+async def action_freeze_trade_engine(request: Request):
+    await CrtlPanel.freeze_trade_engine()
+
+@app.post("/action/cmd/unfreeze_trade_engine", response_class=HTMLResponse, dependencies=[Depends(require_api_key)])
+async def action_unfreeze_trade_engine(request: Request):
+    await CrtlPanel.unfreeze_trade_engine()
+
+@app.post("/action/cmd/shutdown_trade_engine", response_class=HTMLResponse, dependencies=[Depends(require_api_key)])
+async def action_shutdown_trade_engine(request: Request):
+    await CrtlPanel.shutdown_data_engine()
+
 @app.post("/action/cmd/goflat", response_class=HTMLResponse, dependencies=[Depends(require_api_key)])
 async def action_goflat(request: Request):
     # Send Command to redis DB here
@@ -134,16 +215,33 @@ async def action_goflat(request: Request):
     # make this later-> publish to bus (Redis/Kafka): {"cmd":"GO_FLAT"}
     # check engine states -> then send
     await STORE.send_goflat_order()
+    
+    await CrtlPanel.send_goflat_order()
+    
     return templates.TemplateResponse("partials/flash.html", {"request": request, "msg": "GoFlat sent"})
 
 @app.post("/action/cmd/cancelall", response_class=HTMLResponse, dependencies=[Depends(require_api_key)])
 async def action_cancelall(request: Request):
     # Send Command to redis DB here
-    await STORE.send_cancelall_order()
-    # make this later-> publish to bus: {"cmd":"CANCEL_ALL"}
+    #await STORE.send_cancelall_order()
+    
+    await CrtlPanel.send_cancelall_order()
+
     return templates.TemplateResponse("partials/flash.html", {"request": request, "msg": "CancelAll sent"})
 
 # ----- Data Engine -----
+@app.post("/action/cmd/freeze_data_engine", response_class=HTMLResponse, dependencies=[Depends(require_api_key)])
+async def action_freeze_data_engine(request: Request):
+    await CrtlPanel.freeze_data_engine()
+
+@app.post("/action/cmd/unfreeze_data_engine", response_class=HTMLResponse, dependencies=[Depends(require_api_key)])
+async def action_unfreeze_data_engine(request: Request):
+    await CrtlPanel.unfreeze_data_engine()
+
+@app.post("/action/cmd/shutdown_data_engine", response_class=HTMLResponse, dependencies=[Depends(require_api_key)])
+async def action_unfreeze_data_engine(request: Request):
+    await CrtlPanel.shutdown_data_engine()
+
 @app.post("/action/datafeeds/add", response_class=HTMLResponse, dependencies=[Depends(require_api_key)])
 async def action_datafeeds_add(request: Request, symbols: str = Form("")):
     # Add symbols to in-process memory
@@ -153,7 +251,9 @@ async def action_datafeeds_add(request: Request, symbols: str = Form("")):
         if s not in feeds:
             #FEEDS.add(s)
             # Add to in-memory database 
-            await STORE.add_feed(s)
+            #await STORE.add_feed(s)
+            await CrtlPanel.add_datafeed(s)
+            
     # return updated feeds partial (HTMX swaps it in place)
     return await ui_feeds(request)
 

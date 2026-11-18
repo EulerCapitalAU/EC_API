@@ -17,6 +17,7 @@ from EC_API.connect.enums import ConnectionState
 from EC_API.connect.session_util import check_if_logoffed
 from EC_API.connect.cqg.base import ConnectCQG
 from EC_API.monitor.base import Monitor
+from EC_API.monitor.enums import MktDataSubLevel
 from EC_API.monitor.cqg.realtime_data import MonitorDataCQG
 from EC_API.monitor.enums import MktDataSubLevel
 from EC_API.utility.state_mgr import StateMgr
@@ -63,6 +64,8 @@ class DataEngineController(Controller):
             self, out_stream_name: str,
             callback: Optional[Callable[[Any], None]] = None
         ) -> None:
+        # out_stream_name = "mkt_data:WTI"
+        
         if self._channel.out_streams is None:
             raise ControllerInputError("Channel's 'out_streams' is not configured.")
 
@@ -72,17 +75,17 @@ class DataEngineController(Controller):
                 )
 
         # Format Check
-        if len(out_stream_name.split(":")) !=2:
+        if len(out_stream_name.split(":")) !=3:
             raise ControllerInputError("Incorrect format for stream_name input.")
             
         sub_scope = out_stream_name.split(":")[0] 
-        symbol_name = out_stream_name.split(":")[1]
+        symbol_name = out_stream_name.split(":")[-1]
         
         # Add in_stream, add symbols
         self._channel.out_streams.add(out_stream_name)
 
-        if callback:
-            callback(out_stream_name)
+        if callback: # often an engine internal function
+            callback(symbol_name)
 
     async def remove_out_stream(
             self, 
@@ -99,7 +102,7 @@ class DataEngineController(Controller):
                 f"stream_name: {out_stream_name} is not in the channel."
                 )
             
-        if len(out_stream_name.split(":")) !=2:
+        if len(out_stream_name.split(":")) !=3:
             raise ControllerInputError("Incorrect format for stream_name input.")
             
         self._channel.out_streams.discard(out_stream_name)
@@ -128,7 +131,6 @@ class DataEngineCQG:
         self.PASSWORD: str = usr_para['credentials'].get("PASSWORD","")
         self.ACCOUNT_ID: int = usr_para['credentials'].get("ACCOUNT_ID","")
         self.PRIVATE_LABEL: str = usr_para['credentials'].get("PRIVATE_LABEL","")
-
         
         # ---- IPC Channel setting ----
         self.channel: Channel = RedisChannel(channel_cfg_addr)
@@ -154,7 +156,7 @@ class DataEngineCQG:
         self._missed_ticks: dict[str, int] = dict()
         
         # ---- Channel and Control----
-        self.CTRL_STREAM: str = "CMD:Data_Engine"
+        self.CTRL_STREAM: str = "CMD:DataEngineCQG"
         self.controller: Controller = DataEngineController(
             self.monitor, self.channel,
             )
@@ -174,7 +176,7 @@ class DataEngineCQG:
                     
     # ------- Engine functions (Monitor)
     async def stream_and_post(
-        self, out_stream_name: str, symbol_name: str, level
+        self, out_stream_name: str, symbol_name: str, level: MktDataSubLevel
         ) -> None:
         async for parsed_msg in self.monitor.stream(symbol_name, level):
             if self._stop_evt.is_set():
@@ -205,6 +207,8 @@ class DataEngineCQG:
     async def command_response(self, cmd: tuple[Any, ...]) -> None:
         match cmd[0]: # ("CMD:add_stream", "mkt_data:WTI")
             case "CMD:add_stream":
+                # Check if symbol_name is valid
+                
                 await self.controller.add_out_stream(
                     cmd[1], callback = self._add_new_data_stream_task
                     )
@@ -226,10 +230,17 @@ class DataEngineCQG:
                 logger.warning("[Data Engine] Unknown Command: %s", cmd[0])
 
     async def _control_loop(self):
+        # Take commands in the form of # ("CMD:add_stream", "mkt_data:WTI")
+        # all data come from channel in_stream "CMD:DataEngineCQG"
+        # (1) CMD:add_stream, "mkd_data:WTI"
+        # (2) CMD:remove_stream, "mkd_data:WTI"
+        # (3) CMD:freeze_engine, ""
+        # (4) CMD:unfreeze_engine, ""
+        # (5) CMD:shutdown_engine, ""
         while not self._stop_evt.is_set():
             try:
                 # Listen to control command and add/remove out_stream
-                cmd = await self.channel.listen(stream_name=self.CTRL_STREAM, data_name="data")
+                cmd: Optional[tuple[str,str]] = await self.channel.listen(stream_name=self.CTRL_STREAM, data_name="data")
                 if cmd is None:
                     continue
                 
@@ -417,3 +428,10 @@ class DataEngineCQG:
         finally:
             await self.stop()
     
+if __name__ == "__main__":
+    engine = DataEngineCQG(
+        usr_cfg = "test_cre", 
+        channel_cfg_addr = ""
+    )
+    
+    asyncio.run(engine.run())

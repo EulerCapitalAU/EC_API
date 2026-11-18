@@ -391,6 +391,15 @@ class TradeEngineCQG:
                 logger.warning("[Trade Engine] Unknown Command: %s", cmd[0])
                         
     async def _control_loop(self):
+        # Take commands in the form of # ("CMD:add_stream", "mkt_data:WTI")
+        # all data come from channel in_stream "CMD:TradeEngineCQG"
+        # (1) CMD:add_stream, "mkd_data:WTI"
+        # (2) CMD:remove_stream, "mkd_data:WTI"
+        # (3) CMD:freeze_engine, ""
+        # (4) CMD:unfreeze_engine, ""
+        # (5) CMD:shutdown_engine, ""
+        # (6) CMD:cancel_all_request, ""
+        # (7) CMD:goflat_request, ""
         while not self._stop_evt.is_set():
             try:
                 # Listen to control command and add/remove in_stream
