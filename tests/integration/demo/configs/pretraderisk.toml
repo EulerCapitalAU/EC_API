@@ -1,0 +1,25 @@
+[aliases]
+A       = "Asset_A"
+A14     = "Asset_A"
+Asset_A = "Asset_A"
+CLEV25  = "CL_GENERIC"
+QOV25   = "QO_GENERIC"
+
+[global_limits]
+qty_min = 2
+qty_max = 10
+
+[symbol_limits.Asset_A]
+qty_max         = 11
+price_max       = 201.0
+price_min       = 51.0
+stop_price_max  = 211.0
+stop_price_min  = 101.0
+
+[symbol_limits.CL_GENERIC]
+qty_max         = 12
+price_max       = 202.0
+price_min       = 52.0
+stop_price_max  = 212.0
+stop_price_min  = 102.0
+duration_max    = 10

@@ -15,5 +15,5 @@ out_streams = []
 
 [monitor_engine_streams]
 in_streams = ["CMD:MonitorEngine"]
-out_streams = []
+out_streams = []  # to be added dynamically, e.g order_info:WTI
 

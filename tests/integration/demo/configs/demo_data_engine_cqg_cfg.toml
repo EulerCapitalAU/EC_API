@@ -1,2 +1,7 @@
 [credentials]
+HOST_NAME = ""
+USR_NAME = ""
+PASSWORD = ""
+ACCOUNT_ID = ""
+PRIVATE_LABEL = ""
 
