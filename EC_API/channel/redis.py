@@ -22,8 +22,9 @@ from EC_API.exceptions import (
     )
 
 class RedisChannel(Channel):
-    def __init__(self, path: str = ""):        
+    def __init__(self, path: str = "", service_tag: str = "streams"):        
         
+        self._service_tag = service_tag
         # --- global settings
         self.r: Optional[aioredis.Redis] = None
         self.pipeline: Optional[Pipeline] = None
@@ -55,11 +56,11 @@ class RedisChannel(Channel):
                 if not self.host_name:
                     raise KeyError("Field 'host_name' is missing in the toml file.")
                 
-                if not para.get("streams"):
+                if not para.get(self._service_tag):
                     raise KeyError("Field: 'streams' is missing in the toml file.")
                     
-                self.in_streams = set(para["streams"].get("in_streams", []))
-                self.out_streams = set(para["streams"].get("out_streams", []))
+                self.in_streams = set(para[self._service_tag].get("in_streams", []))
+                self.out_streams = set(para[self._service_tag].get("out_streams", []))
                 
                 if not (self.in_streams or self.out_streams):
                     raise KeyError("In field 'streams', at least one of these must be present: 'in_streams' and 'out_streams'.")
