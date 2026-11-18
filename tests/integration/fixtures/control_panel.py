@@ -1,7 +1,9 @@
-import os, tempfile, time, json
+from typing import Optional
+import os, json
 from contextlib import asynccontextmanager
 import uvicorn
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi import (
     FastAPI, Request, Depends,
@@ -23,9 +25,9 @@ class ControlPanel:
         self.feeds_in_use_trade_engine: set = set()
         
         # ------ stream tags ------
-        self.CMD_CRTL_trade_engine: str = "CMD:TradeEngineCQG"
-        self.CMD_CRTL_data_engine: str = "CMD:DataEngineCQG"
-        self.CMD_CRTL_monitor_engine: str = "CMD:MonitorEngine"
+        self.CMD_CTRL_trade_engine: str = "CMD:TradeEngineCQG"
+        self.CMD_CTRL_data_engine: str = "CMD:DataEngineCQG"
+        self.CMD_CTRL_monitor_engine: str = "CMD:MonitorEngine"
         
     # ------ observation ------
     def list_active_datafeeds(self) -> list[str]:
@@ -37,9 +39,10 @@ class ControlPanel:
     # ------ Control Panel internal functions ------
     # --- the dispatch function 
     async def publish_event(self, kind: str, content: dict) -> None:
+        event_stream: str = ""
         await self.channel.broadcast( 
             {"type": kind, "data": json.dumps(content)}, 
-            self.out_stream
+            event_stream
         )
         
     # WS datafeeds
@@ -82,79 +85,79 @@ class ControlPanel:
     async def _add_stream_trade_engine(self, stream_name: str) -> None: 
         await self.channel.broadcast(
             ("CMD:add_stream", stream_name), 
-            self.CMD_CRTL_trade_engine
+            self.CMD_CTRL_trade_engine
             )
         
     async def _remove_stream_trade_engine(self, stream_name:str) -> None: 
         await self.channel.broadcast(
             ("CMD:remove_stream", stream_name), 
-            self.CMD_CRTL_trade_engine
+            self.CMD_CTRL_trade_engine
             )
         
     async def freeze_trade_engine(self) -> None:
         await self.channel.broadcast(
             ("CMD:freeze_engine", ""), 
-            self.CMD_CRTL_trade_engine
+            self.CMD_CTRL_trade_engine
             )
 
-    async def wake_trade_engine(self) -> None:
+    async def unfreeze_trade_engine(self) -> None:
         await self.channel.broadcast(
             ("CMD:unfreeze_engine", ""), 
-            self.CMD_CRTL_trade_engine
+            self.CMD_CTRL_trade_engine
             )
 
     async def shutdown_trade_engine(self) -> None:
         await self.channel.broadcast(
             ("CMD:shutdown_engine", ""), 
-            self.CMD_CRTL_trade_engine
+            self.CMD_CTRL_trade_engine
             )
 
     async def send_cancelall_order(self) -> None:
         await self.channel.broadcast(
             ("CMD:cancel_all_request", ""), 
-            self.CMD_CRTL_trade_engine
+            self.CMD_CTRL_trade_engine
             )
 
     async def send_goflat_order(self) -> None:
         await self.channel.broadcast(
             ("CMD:goflat_request", ""), 
-            self.CMD_CRTL_trade_engine
+            self.CMD_CTRL_trade_engine
             )
     
     # ------ Data Engine functions ------
     async def _add_stream_data_engine(self, stream_name: str) -> None:
         await self.channel.broadcast(
             ("CMD:add_stream", stream_name), 
-            self.CMD_CRTL_data_engine
+            self.CMD_CTRL_data_engine
             )
         
     async def _remove_stream_data_engine(self, stream_name: str) -> None:
         await self.channel.broadcast(
             ("CMD:remove_stream", stream_name), 
-            self.CMD_CRTL_data_engine
+            self.CMD_CTRL_data_engine
             )
     
     async def freeze_data_engine(self) -> None:
         await self.channel.broadcast(
             ("CMD:freeze_engine", ""), 
-            self.CMD_CRTL_data_engine
+            self.CMD_CTRL_data_engine
             )
         
-    async def wake_data_engine(self) -> None:
+    async def unfreeze_data_engine(self) -> None:
         await self.channel.broadcast(
             ("CMD:unfreeze_engine", ""), 
-            self.CMD_CRTL_data_engine
+            self.CMD_CTRL_data_engine
             )
         
     async def shutdown_data_engine(self) -> None:
         await self.channel.broadcast(
             ("CMD:shutdown_engine", ""), 
-            self.CMD_CRTL_data_engine
+            self.CMD_CTRL_data_engine
             )
         
     # ------ Monitor Engine functions ------
     async def freeze_monitor_engine(self) -> None:...
-    async def wake_monitor_engine(self) -> None:...
+    async def unfreeze_monitor_engine(self) -> None:...
     async def shutdown_monitor_engine(self) -> None:...
     
     async def set_datafeeds_config(self) -> None:...
@@ -174,13 +177,19 @@ def get_control_panel(request: Request) -> ControlPanel:
 def create_app(cfg_path: str) -> FastAPI:
     app = FastAPI(title="Control Channel", version="0.1.0", lifespan=make_lifespan(cfg_path))
     app.include_router(router)   # routes defined on an APIRouter() at module scope, see below
+    #app.mount("/static", StaticFiles(directory=os.path.join(base_dir, "static")), name="static")
+
     return app
 
+API_KEY = "" #os.getenv("CONTROL_API_KEY", "dev-secret")
+
+def require_api_key(x_api_key: Optional[str] = Header(None)):
+    if x_api_key != API_KEY:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
 
 router = APIRouter()
 base_dir = os.path.dirname(__file__)
-templates = Jinja2Templates(directory=os.path.join(base_dir, "templates_crtl_panel"))
-require_api_key = 0
+templates = Jinja2Templates(directory=os.path.join(base_dir, "templates_ctrl_panel"))
 
 # ----- Control Panel Layout
 @router.get("/", response_class=HTMLResponse)
@@ -197,16 +206,17 @@ async def index(request: Request):
         }
     )
 
-@router.get("/ui/feeds", response_class=HTMLResponse, dependencies=[Depends(require_api_key)])
-async def ui_feeds(
-        request: Request,
-        control_panel: ControlPanel = Depends(get_control_panel)
-    ) -> None:
+async def _feeds_partial(request: Request, control_panel: ControlPanel):
     feeds = control_panel.list_active_datafeeds()
     return templates.TemplateResponse(
         "partials/feeds.html",
         {"request": request, "symbols": feeds}
     )
+
+@router.get("/ui/feeds", response_class=HTMLResponse, dependencies=[Depends(require_api_key)])
+async def ui_feeds(request: Request, control_panel: ControlPanel = Depends(get_control_panel)):
+    return await _feeds_partial(request, control_panel)
+
 # ----- Trade Engine -----
 @router.post("/action/cmd/freeze_trade_engine", response_class=HTMLResponse, dependencies=[Depends(require_api_key)])
 async def action_freeze_trade_engine(
@@ -283,10 +293,10 @@ async def action_datafeeds_add(
         # Check if the symbol is already in the list, if so, do nothing
         if s not in control_panel.list_active_datafeeds():
             # Add to in-memory database 
-            await control_panel.add_datafeed("mkt_data:trade_tick:"+s)
+            await control_panel.add_datafeed(s)
             
     # return updated feeds partial (HTMX swaps it in place)
-    return await ui_feeds(request)
+    return await _feeds_partial(request, control_panel)
 
 @router.post("/action/datafeeds/remove", response_class=HTMLResponse, dependencies=[Depends(require_api_key)])
 async def action_datafeeds_remove(
@@ -297,13 +307,14 @@ async def action_datafeeds_remove(
 
     for s in [x.strip().upper() for x in symbols.split(",") if x.strip()]:
         # Check if there are strategies currently using these symbols'        
-        if s in control_panel.list_active_datafeeds():
-            print(f"'{s}' is currently in used. ")
-            raise HTTPException(400, f"'{s} is currently in used.")
+        
+        #if s in control_panel.list_active_datafeeds():
+        #    print(f"'{s}' is currently in used. ")
+        #    raise HTTPException(400, f"'{s} is currently in used.")
 
         await control_panel.remove_datafeed(s)
         
-    return await ui_feeds(request)
+    return await _feeds_partial(request, control_panel)
 
 @router.post("/action/datafeeds/remove_all", response_class=HTMLResponse, dependencies=[Depends(require_api_key)])
 async def action_datafeeds_remove_all(
@@ -311,12 +322,12 @@ async def action_datafeeds_remove_all(
     ) -> None:
     
     # Check if there are strategies currently using these symbols'        
-    if len(control_panel.list_active_datafeeds()) != 0:
-        raise HTTPException(400, "Some Data Feeds are still in-use.")
+    #if len(control_panel.list_active_datafeeds()) != 0:
+    #    raise HTTPException(400, "Some Data Feeds are still in-use.")
 
     await control_panel.remove_all_datafeeds()
     
-    return await ui_feeds(request)
+    return await _feeds_partial(request, control_panel)
 
 # ----- Monitor Engine -----
 ## Choose the buffer parameter you want
@@ -346,5 +357,5 @@ async def action_datafeeds_remove_all(
 
 
 if __name__ == "__main__":
-    app = create_app(cfg_path="tests/integration/fixtures/redis_channel_docker.toml")
+    app = create_app(cfg_path="tests/integration/fixtures/test_redis_channel.toml")
     uvicorn.run(app, host="0.0.0.0", port=8080)

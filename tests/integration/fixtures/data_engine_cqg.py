@@ -133,7 +133,10 @@ class DataEngineCQG:
         self.PRIVATE_LABEL: str = usr_para['credentials'].get("PRIVATE_LABEL","")
         
         # ---- IPC Channel setting ----
-        self.channel: Channel = RedisChannel(channel_cfg_addr)
+        self.channel: Channel = RedisChannel(
+            channel_cfg_addr,
+            service_tag="data_engine_streams"
+            )
 
         # ---- Sessions setting ----
         self.conn: Connect = ConnectCQG(

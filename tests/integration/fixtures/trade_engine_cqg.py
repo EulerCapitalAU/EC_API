@@ -233,7 +233,10 @@ class TradeEngineCQG:
         self.acc_summ_table_name: str = usr_para["trade_recorders"].get("acc_summ_table_name","")
         
         # ---- IPC Channel setting ----
-        self.channel: Channel = RedisChannel(channel_cfg_addr)
+        self.channel: Channel = RedisChannel(
+            channel_cfg_addr,
+            service_tag="trade_engine_streams"
+            )
         self.ord_sts_recorder: Recorder = SQLiteRecorder(
             schema = SQLSchemaTable(
                 table_name = self.ord_sts_table_name, 
