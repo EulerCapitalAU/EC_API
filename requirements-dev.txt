@@ -9,3 +9,4 @@ ruff
 websockets
 gcovr
 fastapi
+uvicorn
