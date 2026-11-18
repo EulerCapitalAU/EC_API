@@ -15,205 +15,199 @@
     * { box-sizing: border-box; }
     html, body { height: 100%; margin: 0; }
     body {
-      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial;
       background: radial-gradient(1200px 800px at 10% -10%, #0f172a 0%, #0b0f17 45%, #090d14 100%);
       color: var(--text);
     }
     header {
-      display: flex; justifyn-items: center;
+      display: flex; justify-content: space-between; align-items: center;
       padding: 14px 20px; border-bottom: 1px solid var(--border);
-      background: rgba(9,13,r(6px);
+      background: rgba(9,13,20,.6);
     }
-    .title { font-size: 17px
+    .title { font-size: 17px; font-weight: 600; }
     .muted { color: var(--muted); font-size: 13px; }
-    input, select, textarea,
+    input, select, textarea {
       color: var(--text); background: var(--input-bg);
-      border: 1px solid var(ar(--radius-sm); padding: 9px 12px;
+      border: 1px solid var(--input-bd); border-radius: var(--radius-sm); padding: 9px 12px;
       font-size: 14px;
     }
-    button { cursor: pointer
-    button:hover { filter: brightness(1.15); }
-    button:active { transfor
-    .btn-accent { border-color: #3b82f6; box-shadow: inset 0 0 0 1px
-rgba(59,130,246,.3); }
-    .btn-danger { border-color: #ef4444; box-shadow: inset 0 0 0 1px
-rgba(239,68,68,.35); }
-
-    .app { display: grid; grr; min-height: calc(100vh -57px); }
-    .tab-radio { display: no
-
-    .sidebar {
-      border-right: 1px solid var(--border); padding: 18px 10px;
-      display: flex; flex-di
+    button {
+      cursor: pointer; color: var(--text); background: var(--panel);
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 9px 14px; font-size: 14px;
     }
+    button:hover { filter: brightness(1.15); }
+    button:active { transform: translateY(1px); }
+    .btn-accent { border-color: #3b82f6; box-shadow: inset 0 0 0 1px rgba(59,130,246,.3); }
+    .btn-danger { border-color: #ef4444; box-shadow: inset 0 0 0 1px rgba(239,68,68,.35); }
+
+    .tab-radio { display: none; }
+
+    .app {
+      display: grid;
+      grid-template-columns: 1fr 2fr 3fr;
+      min-height: calc(100vh - 57px);
+    }
+
+    .nav-col {
+      border-right: 1px solid var(--border); padding: 18px 10px;
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .control-col {
+      border-right: 1px solid var(--border); padding: 20px;
+      display: flex; flex-direction: column; gap: var(--gap);
+    }
+    .display-col { padding: 20px; display: flex; flex-direction: column; gap: var(--gap); }
+
     .tab-label {
       display: block; padding: 10px 14px; border-radius: var(--radius-sm);
-      color: var(--muted); cpx; user-select: none;
+      color: var(--muted); cursor: pointer; user-select: none;
     }
-    .tab-label:hover { backg var(--text); }
+    .tab-label:hover { background: var(--panel); color: var(--text); }
 
-    .content { padding: 20px
-    .tab-panel { display: none; grid-template-columns: 1fr 360px; gap: var(--gap); }
+    .page { display: none; flex-direction: column; gap: var(--gap); }
 
-    #tab-data:checked ~ .sidebar label[for="tab-data"],
-    #tab-trade:checked ~ .si
-    #tab-monitor:checked ~ .sidebar label[for="tab-monitor"] {
-      background: var(--pane-shadow: inset 2px 0 0var(--accent);
+    #tab-data:checked ~ .app .nav-col label[for="tab-data"],
+    #tab-trade:checked ~ .app .nav-col label[for="tab-trade"],
+    #tab-monitor:checked ~ .app .nav-col label[for="tab-monitor"] {
+      background: var(--panel); color: var(--text); box-shadow: inset 2px 0 0 var(--accent);
     }
-    #tab-data:checked ~ .content #panel-data,
-    #tab-trade:checked ~ .co
-    #tab-monitor:checked ~ .content #panel-monitor { display: grid; }
+    #tab-data:checked ~ .app #control-data,
+    #tab-data:checked ~ .app #display-data,
+    #tab-trade:checked ~ .app #control-trade,
+    #tab-trade:checked ~ .app #display-trade,
+    #tab-monitor:checked ~ .app #control-monitor,
+    #tab-monitor:checked ~ .app #display-monitor {
+      display: flex;
+    }
 
     .panel {
-      background: linear-graar(--panel-2));
+      background: linear-gradient(180deg, var(--panel), var(--panel-2));
       border: 1px solid var(--border); border-radius: var(--radius);
-      padding: 16px; margin-
+      padding: 16px;
     }
-    .panel h2 { margin: 0 0 eight: 600; }
+    .panel h2 { margin: 0 0 12px; font-size: 15px; font-weight: 600; }
     .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-    .col { display: flex; flx; }
+    .col { display: flex; flex-direction: column; gap: 10px; }
     .pill {
-      display: inline-flex; ;
+      display: inline-flex; align-items: center;
       background: var(--pill-bg); border: 1px solid var(--pill-bd);
-      border-radius: 999px; x 5px 0 0; font-size: 12px;
+      border-radius: 999px; padding: 5px 10px; font-size: 12px;
     }
     .observe {
       border: 1px dashed var(--border); border-radius: var(--radius);
-      padding: 14px; min-heicolor: var(--muted);
+      padding: 14px; min-height: 160px; color: var(--muted);
       display: flex; flex-direction: column; gap: 8px;
     }
     .observe h3 { margin: 0; font-size: 13px; color: var(--text); font-weight: 600; }
-    .observe .placeholder { -items: center;justify-content: center; text-align: center; }
+    .observe .placeholder { flex: 1; display: flex; align-items: center; justify-content: center; text-align: center; }
   </style>
 </head>
 <body>
   <header>
-    <div class="title">EC Co
-    <input id="apiKey" value="{{ api_key_prefill }}" placeholder="X-API-Key"
-style="min-width:220px;" />
+    <div class="title">EC Control Panel</div>
+    <input id="apiKey" value="{{ api_key_prefill }}" placeholder="X-API-Key" style="min-width:220px;" />
   </header>
 
   <input type="radio" name="tab" id="tab-data" class="tab-radio" checked>
-  <input type="radio" name="b-radio">
+  <input type="radio" name="tab" id="tab-trade" class="tab-radio">
   <input type="radio" name="tab" id="tab-monitor" class="tab-radio">
 
   <div class="app">
-    <nav class="sidebar">
+    <nav class="nav-col">
       <label for="tab-data" class="tab-label">Data Engine</label>
-      <label for="tab-trade"ne</label>
+      <label for="tab-trade" class="tab-label">Trade Engine</label>
       <label for="tab-monitor" class="tab-label">Monitor Engine</label>
     </nav>
 
-    <main class="content">
-      <!-- ===== DATA ENGINE ===== -->
-      <section id="panel-dat
-        <div>
-          <div class="panel"
-            <h2>Engine Control</h2>
-            <div class="row"
-              <button class="btn-accent" hx-post="/action/cmd/freeze_data_engine"
-                hx-headers='document.getElementById("apiKey").value}'>Freeze</button>
-              <button class=/cmd/unfreeze_data_engine"
-                hx-headers='js:{"X-API-Key":
-document.getElementById("apin>
-              <button class="btn-danger" hx-post="/action/cmd/shutdown_data_engine"
-                hx-headers='document.getElementById("apiKey").value}'>Shutdown</button>
-            </div>
-          </div>
-
-          <div class="panel">
-            <h2>Data Feeds</
-            <form class="col">
-              <input name="sT,NATGAS" />
-              <div class="row">
-                <button clashx-post="/action/datafeeds/add"
-                  hx-target=
-                  hx-headers='js:{"X-API-Key":
-document.getElementById("api
-                <button class="btn-accent" type="submit"
-hx-post="/action/datafeeds/r
-                  hx-target="#feeds-list"
-                  hx-headersdocument.getElementById("apiKey").value}'>Remove</button>
-                <button clashx-post="/action/datafeeds/remove_all"
-                  hx-target=
-                  hx-headers='js:{"X-API-Key":
-document.getElementById("apiton>
-              </div>
-            </form>
-            <div id="feeds-list" hx-get="/ui/feeds" hx-trigger="load"
-              hx-headers='jsdocument.getElementById("apiKey").value}'></div>
+    <main class="control-col">
+      <section id="control-data" class="page">
+        <div class="panel">
+          <h2>Engine Control</h2>
+          <div class="row">
+            <button class="btn-accent" hx-post="/action/cmd/freeze_data_engine"
+              hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'>Freeze</button>
+            <button class="btn-accent" hx-post="/action/cmd/unfreeze_data_engine"
+              hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'>Unfreeze</button>
+            <button class="btn-danger" hx-post="/action/cmd/shutdown_data_engine"
+              hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'>Shutdown</button>
           </div>
         </div>
 
-        <div class="observe">
-          <h3>Live Tick Feed
-          <div class="placeholder">WS feed not wired yet — reserved for streaming tick
-data.</div>
-        </div>
-      </section>
-
-      <!-- ===== TRADE ENGIN
-      <section id="panel-trade" class="tab-panel">
-        <div>
-          <div class="panel">
-            <h2>Engine Contr
+        <div class="panel">
+          <h2>Data Feeds</h2>
+          <form class="col">
+            <input name="symbols" placeholder="e.g. WTI,NATGAS" />
             <div class="row">
-              <button class=/cmd/freeze_trade_engine"
-                hx-headers='js:{"X-API-Key":
-document.getElementById("api
-              <button class="btn-accent" hx-post="/action/cmd/unfreeze_trade_engine"
-                hx-headers='document.getElementById("apiKey").value}'>Unfreeze</button>
-              <button class=/cmd/shutdown_trade_engine"
-                hx-headers='js:{"X-API-Key":
-document.getElementById("apin>
+              <button class="btn-accent" type="submit" hx-post="/action/datafeeds/add"
+                hx-target="#feeds-list"
+                hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'>Add</button>
+              <button class="btn-accent" type="submit" hx-post="/action/datafeeds/remove"
+                hx-target="#feeds-list"
+                hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'>Remove</button>
+              <button class="btn-danger" type="submit" hx-post="/action/datafeeds/remove_all"
+                hx-target="#feeds-list"
+                hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'>Remove All</button>
             </div>
-          </div>
-
-          <div class="panel"
-            <h2>Risk Control</h2>
-            <div class="row"
-              <button class="btn-danger" hx-post="/action/cmd/goflat"
-hx-target="#flash"
-                hx-headers='js:{"X-API-Key":
-document.getElementById("api>
-              <button class="btn-danger" hx-post="/action/cmd/cancelall"
-hx-target="#flash"
-                hx-headers='js:{"X-API-Key":
-document.getElementById("apiton>
-            </div>
-            <div id="flash">
-          </div>
-        </div>
-
-        <div class="observe"
-          <h3>Order Confirmations</h3>
-          <div class="placeh reserved for live order/fill confirmations.</div>
+          </form>
+          <div id="feeds-list" hx-get="/ui/feeds" hx-trigger="load"
+            hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'></div>
         </div>
       </section>
 
-      <!-- ===== MONITOR ENGINE ===== -->
-      <section id="panel-mon
-        <div>
-          <div class="panel"
-            <h2>Engine Control</h2>
-            <div class="row"
-              <button class="btn-accent" hx-post="/action/cmd/freeze_monitor_engine"
-                hx-headers='document.getElementById("apiKey").value}'>Freeze</button>
-              <button class=/cmd/unfreeze_monitor_engine"
-                hx-headers='js:{"X-API-Key":
-document.getElementById("apin>
-              <button class="btn-danger" hx-post="/action/cmd/shutdown_monitor_engine"
-                hx-headers='document.getElementById("apiKey").value}'>Shutdown</button>
-            </div>
+      <section id="control-trade" class="page">
+        <div class="panel">
+          <h2>Engine Control</h2>
+          <div class="row">
+            <button class="btn-accent" hx-post="/action/cmd/freeze_trade_engine"
+              hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'>Freeze</button>
+            <button class="btn-accent" hx-post="/action/cmd/unfreeze_trade_engine"
+              hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'>Unfreeze</button>
+            <button class="btn-danger" hx-post="/action/cmd/shutdown_trade_engine"
+              hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'>Shutdown</button>
           </div>
         </div>
 
-        <div class="observe"
-          <h3>Engine Status</h3>
-          <div class="placehngine health/metrics.</div>
+        <div class="panel">
+          <h2>Risk Control</h2>
+          <div class="row">
+            <button class="btn-danger" hx-post="/action/cmd/goflat" hx-target="#flash"
+              hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'>Go Flat</button>
+            <button class="btn-danger" hx-post="/action/cmd/cancelall" hx-target="#flash"
+              hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'>Cancel All</button>
+          </div>
+          <div id="flash"></div>
+        </div>
+      </section>
+      <section id="control-monitor" class="page">
+        <div class="panel">
+          <h2 class="muted">Monitor Engine</h2>
         </div>
       </section>
     </main>
+
+
+    <aside class="display-col">
+      <section id="display-data" class="page">
+        <div class="observe">
+          <h3>Live Tick Feed</h3>
+          <div class="placeholder">WS feed not wired yet — reserved for streaming tick data.</div>
+        </div>
+      </section>
+
+      <section id="display-trade" class="page">
+        <div class="observe">
+          <h3>Order Confirmations</h3>
+          <div class="placeholder">Reserved for live order/fill confirmations.</div>
+        </div>
+      </section>
+
+      <section id="display-monitor" class="page">
+        <div class="observe">
+          <div class="placeholder">—</div>
+        </div>
+      </section>
+    </aside>
   </div>
 </body>
 </html>

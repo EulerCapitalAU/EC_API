@@ -29,6 +29,12 @@ class ControlPanel:
         self.CMD_CTRL_data_engine: str = "CMD:DataEngineCQG"
         self.CMD_CTRL_monitor_engine: str = "CMD:MonitorEngine"
         
+    def start(self):
+        self.channel.connect()
+        
+    def stop(self):
+        self.channel.disconnect()
+
     # ------ observation ------
     def list_active_datafeeds(self) -> list[str]:
         return list(self.feeds_in_use_data_engine)
@@ -167,8 +173,15 @@ def make_lifespan(cfg_path: str):
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         #cfg_path = os.environ["CONTROL_PANEL_CHANNEL_CFG"]   # or argv, or wherever you want it from
-        app.state.control_panel = ControlPanel(cfg_path)
-        yield
+        
+        control_panel = ControlPanel(cfg_path)
+        await control_panel.start()
+        app.state.control_panel = control_panel
+        try:
+            yield
+        finally:
+            await control_panel.stop()
+
     return lifespan
     
 def get_control_panel(request: Request) -> ControlPanel:
@@ -196,9 +209,9 @@ templates = Jinja2Templates(directory=os.path.join(base_dir, "templates_ctrl_pan
 async def index(request: Request):
     #active_strategies = await STORE.list_strategies()
     return templates.TemplateResponse(
+        request,
         "index.html",
         {
-            "request": request,
             #"api_key_prefill": os.getenv("CONTROL_API_KEY", "dev-secret"),
             #"strategy_catalog": STRATEGY_CATALOG,
             #"active_strategies": active_strategies,
@@ -209,8 +222,9 @@ async def index(request: Request):
 async def _feeds_partial(request: Request, control_panel: ControlPanel):
     feeds = control_panel.list_active_datafeeds()
     return templates.TemplateResponse(
+        request,
         "partials/feeds.html",
-        {"request": request, "symbols": feeds}
+        {"symbols": feeds}
     )
 
 @router.get("/ui/feeds", response_class=HTMLResponse, dependencies=[Depends(require_api_key)])
@@ -249,7 +263,7 @@ async def action_goflat(
     # check engine states -> then send    
     await control_panel.send_goflat_order()
     
-    return templates.TemplateResponse("partials/flash.html", {"request": request, "msg": "GoFlat sent"})
+    return templates.TemplateResponse(request, "partials/flash.html", {"msg": "GoFlat sent"})
 
 @router.post("/action/cmd/cancelall", response_class=HTMLResponse, dependencies=[Depends(require_api_key)])
 async def action_cancelall(
@@ -257,7 +271,7 @@ async def action_cancelall(
     ) -> None:
     await control_panel.send_cancelall_order()
 
-    return templates.TemplateResponse("partials/flash.html", {"request": request, "msg": "CancelAll sent"})
+    return templates.TemplateResponse(request, "partials/flash.html", {"msg": "CancelAll sent"})
 
 # ----- Data Engine -----
 @router.post("/action/cmd/freeze_data_engine", response_class=HTMLResponse, dependencies=[Depends(require_api_key)])
