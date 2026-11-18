@@ -1,0 +1,25 @@
+services:
+  redis:
+    image: redis:7
+  data_engine:
+    image: ec_api_app:latest
+    build: .
+    command: python -m tests.integration.demo.run_data_engine_cqg
+    depends_on: [redis]
+    dns: ["1.1.1.1", "8.8.8.8"]
+    dns_opt: ["single-request"]
+  trade_engine:
+    image: ec_api_app:latest
+    build: .
+    command: python -m tests.integration.demo.run_trade_engine_cqg
+    depends_on: [redis]
+    dns: ["1.1.1.1", "8.8.8.8"]
+    dns_opt: ["single-request"]
+  control_panel:
+    image: ec_api_app:latest
+    build: .
+    command: python -m tests.integration.demo.run_control_panel
+    depends_on: [redis]
+    ports: ["8080:8080"]
+    dns: ["1.1.1.1", "8.8.8.8"]
+    dns_opt: ["single-request"]
