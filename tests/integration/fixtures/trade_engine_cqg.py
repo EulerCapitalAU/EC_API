@@ -597,3 +597,4 @@ class TradeEngineCQG:
         finally:
             await self.stop()
              
+if __name__ == "__main__":...
