@@ -71,7 +71,11 @@ class RedisChannel(Channel):
         if not self.host_name:
             raise ChannelMissingSettingError("Missing URL to start a redis server.")
             
-        self.r = aioredis.Redis.from_url(self.host_name['URL'], decode_responses=False)
+        self.r = aioredis.Redis.from_url(
+            self.host_name['URL'],
+            decode_responses=False,
+            socket_timeout=None,
+            )
         
         self._pubsub = self.r.pubsub()
         self.pipeline = self.r.pipeline()
