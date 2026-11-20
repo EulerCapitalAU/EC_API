@@ -150,7 +150,9 @@ class DataEngineCQG:
         self.num_logoff_trial: int = 10
 
         # ---- Engine property ----
-        self._stop_evt: asyncio.Event = asyncio.Event()
+        self._terminate_evt: asyncio.Event = asyncio.Event()
+        self._start_evt: asyncio.Event = asyncio.Event() # to start the server connection
+        self._stop_evt: asyncio.Event = asyncio.Event() # to drop the server connection
         self._freeze_evt: asyncio.Event = asyncio.Event()
         self._notify_evt: asyncio.Event = asyncio.Event() # to wake up the main loop
 
@@ -168,9 +170,9 @@ class DataEngineCQG:
         # ---- State Control ----
         self._state_mgr = StateMgr(
             ENGINESTATE_LIFECYCLE,
-            start=EngineState.READY,
-            cur=EngineState.READY,
-            allowed_starts=[EngineState.READY],
+            start=EngineState.SETUP,
+            cur=EngineState.SETUP,
+            allowed_starts=[EngineState.SETUP],
         )
         
     @property
@@ -227,6 +229,8 @@ class DataEngineCQG:
                 await self.request_freeze()
             case "CMD:unfreeze_engine":
                 await self.request_wake()
+            case "CMD:start_engine":
+                await self.request_start()
             case "CMD:shutdown_engine":
                 await self.request_stop()
             case _:
@@ -240,7 +244,7 @@ class DataEngineCQG:
         # (3) CMD:freeze_engine, ""
         # (4) CMD:unfreeze_engine, ""
         # (5) CMD:shutdown_engine, ""
-        while not self._stop_evt.is_set():
+        while not self._terminate_evt.is_set():
             try:
                 # Listen to control command and add/remove out_stream
                 cmd: Optional[tuple[str,str]] = await self.channel.listen(stream_name=self.CTRL_STREAM, data_name="data")
@@ -271,12 +275,7 @@ class DataEngineCQG:
 
     # -------- Engine LifeCycle
     async def _setup(self) -> bool:
-        try: # Connect to channel
-            await self.channel.connect()
-            
-            # start control loop
-            self._control_task = asyncio.create_task(self._control_loop())
-                
+        try: # Connect to channel                
             # start monitor
             await self.monitor.__aenter__()
             monitor_started = (self.monitor.state in (
@@ -287,7 +286,7 @@ class DataEngineCQG:
                 ))
             if not monitor_started:
                 logger.warning("[Data Engine]: Failed to launch Monitor.")
-                await self.stop()
+                await self.request_stop()
                 return False
             
             for trial in range(self.num_logon_trial):
@@ -311,30 +310,35 @@ class DataEngineCQG:
             return False
         except ConnectEnterError as e:
             logger.warning("[Data Engine]: Failed to launch Monitor: %s", e)
-            await self.stop()
+            await self.request_stop()
             return False
 
     async def start(self) -> bool:
+        # For starting server connection
+        if not self._start_evt.is_set():
+            return False
         try:
             setup_is_done = await self._setup()
             if setup_is_done:
                 self._state_mgr.transition_to(EngineState.RUNNING)
             else:
-                self._state_mgr.transition_to(EngineState.TERMINATED)
-                await self.stop()
+                await self.request_stop()
                 return False
 
         except (ChannelMissingSettingError) as e:
             logger.warning("[Data Engine]: %s", e)
-            await self.stop()
+            await self.request_stop()
             return False
+        finally:
+            self._start_evt.clear()
         
         return True
     
     async def stop(self) -> bool:
-        if self._stop_evt.is_set():
-            return False
-        self._stop_evt.set()
+        # For stopping server connection
+        #if self._stop_evt.is_set():
+        #    return False
+        #self._stop_evt.set()
 
         logoff_done = True
         if self.monitor.state == ConnectionState.CONNECTED_LOGON:
@@ -352,17 +356,23 @@ class DataEngineCQG:
                 logger.warning("[Data Engine]: %s", e)
                 logoff_done = False
         elif not check_if_logoffed(trans_log = self.monitor._conn._state_mgr.trans_log):
-            logger.warning("[Data Engine]: Trade Session not in a state to be logoff.")
+            logger.warning("[Data Engine]: Data Session not in a state to be logoff.")
             logoff_done = False
 
         try:
             await self.monitor.__aexit__(None, None, None)
         except (ConnectRequestError, ConnectTimeOutError) as e:
             logger.warning("[Data Engine]: %s", e)
+            
         monitor_stopped = self.monitor.state == ConnectionState.CLOSED
         if not monitor_stopped:
             logger.error("[Data Engine] Monitor is not stopped.")
             
+        self._stop_evt.clear()
+        return (logoff_done and monitor_stopped)
+    
+    async def shutdown(self) -> bool:
+        # For channel disconnect and control task clean up
         stream_cleanup_done = True
         try: # stream cleanup
             if self.channel.out_streams is None:
@@ -390,47 +400,70 @@ class DataEngineCQG:
             logger.warning("[Data Engine]: %s", e)
             channel_disconnected = False
 
-        self._state_mgr.transition_to(EngineState.TERMINATED)
-        return (logoff_done and monitor_stopped and \
-                stream_cleanup_done and channel_disconnected)
-    
+        #self._state_mgr.transition_to(EngineState.TERMINATED)
+        return (stream_cleanup_done and channel_disconnected)
+        
     # --- Engine request methods ----
     async def request_freeze(self) -> None:
         self._freeze_evt.set()
         self._notify_evt.set()
-
-
+        
     async def request_wake(self) -> None:
         self._freeze_evt.clear()
+        self._notify_evt.set()
+        
+    async def request_start(self) -> None:
+        self._start_evt.set()
         self._notify_evt.set()
         
     async def request_stop(self) -> None:
         self._stop_evt.set()  
         self._notify_evt.set()
+        
+    async def request_shutdown(self) -> None:
+        self._terminate_evt.set()
+        self._notify_evt.set()
 
-    # --- main ---  
+    # --- main ---      
     async def run(self) -> None:
         try:
-            is_started = await self.start()
-            if not is_started:
-                logger.error("[Data Engine] Engine failed to start.")
-                return
+            await self.channel.connect()
             
-            # Main loop
-            while True:
+            self._control_task = asyncio.create_task(self._control_loop())
+            
+            self._state_mgr.transition_to(EngineState.READY)
+            
+            while not self._terminate_evt.is_set():
+                # Main loop                    
                 await self._notify_evt.wait()
                 self._notify_evt.clear()
-                
-                if self._stop_evt.is_set():
-                    break
+
+                # ---- Event handling
+                if self._start_evt.is_set() and self.state is EngineState.READY: #
+                    is_started = await self.start()
+                    if not is_started:
+                        logger.error("[Data Engine] Data Session failed to start.")
+                        
+                if self._stop_evt.is_set() and self.state in (
+                        EngineState.READY, EngineState.RUNNING, EngineState.FROZEN
+                    ):
+                    is_stopped = await self.stop()
+                    if is_stopped:
+                        self._state_mgr.transition_to(EngineState.READY)
                                     
                 if self._freeze_evt.is_set() and self.state is EngineState.RUNNING:
                     await self._freeze()
                 elif not self._freeze_evt.is_set() and self.state is EngineState.FROZEN:
                     await self._unfreeze()
+                
+        except ChannelMissingSettingError as e:
+            logger.warning("[Data Engine]: %s", e)
+            
         finally:
-            await self.stop()
-    
+            is_shutdown = await self.shutdown()
+            if is_shutdown:
+                self._state_mgr.transition_to(EngineState.TERMINATED)
+
 if __name__ == "__main__":
     engine = DataEngineCQG(
         usr_cfg = "test_cre", 
