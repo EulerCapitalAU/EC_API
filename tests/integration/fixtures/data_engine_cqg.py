@@ -184,8 +184,8 @@ class DataEngineCQG:
         self, out_stream_name: str, symbol_name: str, level: MktDataSubLevel
         ) -> None:
         async for parsed_msg in self.monitor.stream(symbol_name, level):
-            if self._stop_evt.is_set():
-                break
+            if self.state is not EngineState.RUNNING:
+                continue            
             try:
                 await self.channel.broadcast(parsed_msg, out_stream_name)
             except ChannelBroadcastError:
@@ -205,7 +205,7 @@ class DataEngineCQG:
     async def _initiate_ingestion_loop(self, out_stream_name: str):
         sub_scope, symbol_name = out_stream_name.split(":")
         level = self.controller.SCOPE_MAP[sub_scope]
-        while not self._stop_evt.is_set():
+        while not self._terminate_evt.is_set():
             await self.stream_and_post(out_stream_name, symbol_name, level)
 
     # ------- Controls
@@ -225,14 +225,16 @@ class DataEngineCQG:
                         await task          # await ONLY here — to let CancelledError settle
                     except asyncio.CancelledError:
                         pass
+            case "CMD:start_engine":
+                await self.request_start()
+            case "CMD:stop_engine":
+                await self.request_stop()
             case "CMD:freeze_engine":
                 await self.request_freeze()
             case "CMD:unfreeze_engine":
                 await self.request_wake()
-            case "CMD:start_engine":
-                await self.request_start()
             case "CMD:shutdown_engine":
-                await self.request_stop()
+                await self.request_shutdown()
             case _:
                 logger.warning("[Data Engine] Unknown Command: %s", cmd[0])
 
@@ -241,9 +243,11 @@ class DataEngineCQG:
         # all data come from channel in_stream "CMD:DataEngineCQG"
         # (1) CMD:add_stream, "mkd_data:WTI"
         # (2) CMD:remove_stream, "mkd_data:WTI"
-        # (3) CMD:freeze_engine, ""
-        # (4) CMD:unfreeze_engine, ""
-        # (5) CMD:shutdown_engine, ""
+        # (3) CMD:start_engine, ""
+        # (4) CMD:stop_engine, ""
+        # (5) CMD:freeze_engine, ""
+        # (6) CMD:unfreeze_engine, ""
+        # (7) CMD:shutdown_engine, ""
         while not self._terminate_evt.is_set():
             try:
                 # Listen to control command and add/remove out_stream
@@ -335,11 +339,6 @@ class DataEngineCQG:
         return True
     
     async def stop(self) -> bool:
-        # For stopping server connection
-        #if self._stop_evt.is_set():
-        #    return False
-        #self._stop_evt.set()
-
         logoff_done = True
         if self.monitor.state == ConnectionState.CONNECTED_LOGON:
             try: # logoff

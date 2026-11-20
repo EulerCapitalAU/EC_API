@@ -283,6 +283,8 @@ class TradeEngineCQG:
         self.PREC.load(pretraderisk_cfg_addr)
         
         # ---- Engine property ----
+        self._terminate_evt:  asyncio.Event = asyncio.Event()
+        self._start_evt: asyncio.Event = asyncio.Event()
         self._stop_evt: asyncio.Event = asyncio.Event()
         self._freeze_evt: asyncio.Event = asyncio.Event()
         self._notify_evt: asyncio.Event = asyncio.Event() # to wake up the main loop
@@ -300,12 +302,10 @@ class TradeEngineCQG:
         # ---- State Control ----
         self._state_mgr = StateMgr(
             ENGINESTATE_LIFECYCLE,
-            start=EngineState.READY,
-            cur=EngineState.READY,
-            allowed_starts=[EngineState.READY],
+            start=EngineState.SETUP,
+            cur=EngineState.SETUP,
+            allowed_starts=[EngineState.SETUP],
         )
-        #self.is_started: bool = False
-        #self.is_stopped: bool = False
 
     @property
     def state(self):
@@ -337,8 +337,7 @@ class TradeEngineCQG:
         return task
 
     async def _send_order_loop(self, in_stream_name: str) -> None:
-        while not self._stop_evt.is_set():
-
+        while not self._terminate_evt.is_set():
             # Continuous listening to the latest order instruction from redis stream
             msg = await self.channel.listen(in_stream_name)             
             # If there is something, an event is triggered
@@ -370,13 +369,7 @@ class TradeEngineCQG:
                         await task          # await ONLY here — to let CancelledError settle
                     except asyncio.CancelledError:
                         pass
-                
-            case "CMD:freeze_engine":
-                await self.request_freeze()
-            case "CMD:unfreeze_engine":
-                await self.request_wake()
-            case "CMD:shutdown_engine":
-                await self.request_stop()
+                    
             case "CMD:cancel_all_request":
                 await LiveOrderCQG(self.trade_session).send(
                     request_type = RequestType.CANCELALL_ORDER, 
@@ -389,7 +382,19 @@ class TradeEngineCQG:
                     request_type = RequestType.GOFLAT_ORDER, 
                     request_details = {
                         "when_utc_timestamp": datetime.now(timezone.utc),
-                        })
+                        })   
+                
+            case "CMD:start_engine":
+                await self.request_start()
+            case "CMD:stop_engine":
+                await self.request_stop()
+            case "CMD:freeze_engine":
+                await self.request_freeze()
+            case "CMD:unfreeze_engine":
+                await self.request_wake()
+            case "CMD:shutdown_engine":
+                await self.request_shutdown()
+                
             case _:
                 logger.warning("[Trade Engine] Unknown Command: %s", cmd[0])
                         
@@ -398,12 +403,14 @@ class TradeEngineCQG:
         # all data come from channel in_stream "CMD:TradeEngineCQG"
         # (1) CMD:add_stream, "mkd_data:WTI"
         # (2) CMD:remove_stream, "mkd_data:WTI"
-        # (3) CMD:freeze_engine, ""
-        # (4) CMD:unfreeze_engine, ""
-        # (5) CMD:shutdown_engine, ""
-        # (6) CMD:cancel_all_request, ""
-        # (7) CMD:goflat_request, ""
-        while not self._stop_evt.is_set():
+        # (3) CMD:cancel_all_request, ""
+        # (4) CMD:goflat_request, ""
+        # (5) CMD:start_engine, ""
+        # (6) CMD:stop_engine, ""
+        # (7) CMD:freeze_engine, ""
+        # (8) CMD:unfreeze_engine, ""
+        # (9) CMD:shutdown_engine, ""
+        while not self._terminate_evt.is_set():
             try:
                 # Listen to control command and add/remove in_stream
                 cmd = await self.channel.listen(stream_name=self.CTRL_STREAM, data_name="data")
@@ -434,17 +441,12 @@ class TradeEngineCQG:
     
     # -------- Engine LifeCycle
     async def _setup(self) -> bool:
-        try: # Connect to channel
-            await self.channel.connect()
-            
-            # start control loop
-            self._control_task = asyncio.create_task(self._control_loop())
-                
+        try:             
             # start trade session
             trade_session_start = await self.trade_session.start()
             if not trade_session_start:
                 logger.warning("[Trade Engine]: Failed to launch Trade Session.")
-                await self.stop()
+                await self.request_stop()
                 return False
             
             for trial in range(self.num_logon_trial):
@@ -477,16 +479,17 @@ class TradeEngineCQG:
             if setup_is_done:
                 self._state_mgr.transition_to(EngineState.RUNNING)
             else:
-                self._state_mgr.transition_to(EngineState.TERMINATED)
-                await self.stop()
+                await self.request_stop()
                 return False
             
         except (ChannelMissingSettingError, 
                 RecorderCriticalError) as e:
             logger.warning("[Trade Engine]: %s", e)
-            await self.stop()
+            await self.request_stop()
             return False
-        
+        finally:
+            self._start_evt.clear()
+
         try:
             if self.channel.in_streams is None:
                 raise ControllerInputError("Channel's 'in_streams' is not configured.")
@@ -497,15 +500,14 @@ class TradeEngineCQG:
                     )
         except ControllerInputError as e:
             logger.error("[Trade Engine]: %s", e)
-            self._state_mgr.transition_to(EngineState.TERMINATED)
-            await self.stop()
+            await self.request_stop()
             return False
         return True
 
     async def stop(self) -> bool:
-        if self._stop_evt.is_set():
-            return False
-        self._stop_evt.set()
+        #if self._stop_evt.is_set():
+        #    return False
+        #self._stop_evt.set()
         
         logoff_done = True
         if self.trade_session.state == ConnectionState.CONNECTED_LOGON:
@@ -530,7 +532,11 @@ class TradeEngineCQG:
         trade_session_stopped = await self.trade_session.stop()
         if not trade_session_stopped:
             logger.error("[Trade Engine] Trade Session is not stopped.")
-
+        self._stop_evt.clear()
+        return (logoff_done and trade_session_stopped)
+            
+    async def shutdown(self) ->bool:
+        # For channel disconnect and control task clean up
         stream_cleanup_done = True
         try: # stream cleanup
             if self.channel.in_streams is None:
@@ -544,7 +550,7 @@ class TradeEngineCQG:
             logger.warning("[Trade Engine]: %s", e)
             stream_cleanup_done = False
 
-        # --- End control loop
+        # End control loop
         if self._control_task is not None:
             self._control_task.cancel()
             try:
@@ -553,51 +559,77 @@ class TradeEngineCQG:
                 pass
             
         channel_disconnected = True
-        try: # --- close channel
+        try:
             await self.channel.disconnect()
         except ChannelMissingSettingError as e:
             logger.warning("[Trade Engine]: %s", e)
             channel_disconnected = False
 
-        self._state_mgr.transition_to(EngineState.TERMINATED)
-        return (logoff_done and trade_session_stopped and \
-                stream_cleanup_done and channel_disconnected)
-        
+        #self._state_mgr.transition_to(EngineState.TERMINATED)
+        return (stream_cleanup_done and channel_disconnected)
+
+
     # --- Engine request methods ----
     async def request_freeze(self) -> None:
         self._freeze_evt.set()
         self._notify_evt.set()
 
-
     async def request_wake(self) -> None:
         self._freeze_evt.clear()
+        self._notify_evt.set()
+        
+    async def request_start(self) -> None:
+        self._start_evt.set()
         self._notify_evt.set()
         
     async def request_stop(self) -> None:
         self._stop_evt.set()  
         self._notify_evt.set()
+        
+    async def request_shutdown(self) -> None:
+        self._terminate_evt.set()
+        self._notify_evt.set()
 
     # --- main ---  
+    
     async def run(self) -> None:
         try:
-            is_started = await self.start()
-            if not is_started:
-                logger.error("[Trade Engine] Engine failed to start.")
-                return
+            await self.channel.connect()
             
-            # Main loop
-            while True:
+            self._control_task = asyncio.create_task(self._control_loop())
+            
+            self._state_mgr.transition_to(EngineState.READY)
+            
+            while not self._terminate_evt.is_set():
+                # Main loop                    
                 await self._notify_evt.wait()
                 self._notify_evt.clear()
-                
-                if self._stop_evt.is_set():
-                    break
+
+                # ---- Event handling
+                if self._start_evt.is_set() and self.state is EngineState.READY: #
+                    is_started = await self.start()
+                    if not is_started:
+                        logger.error("[Trade Engine] Trade Session failed to start.")
+                        
+                if self._stop_evt.is_set() and self.state in (
+                        EngineState.READY, EngineState.RUNNING, EngineState.FROZEN
+                    ):
+                    is_stopped = await self.stop()
+                    if is_stopped:
+                        self._state_mgr.transition_to(EngineState.READY)
                                     
                 if self._freeze_evt.is_set() and self.state is EngineState.RUNNING:
                     await self._freeze()
                 elif not self._freeze_evt.is_set() and self.state is EngineState.FROZEN:
                     await self._unfreeze()
+                
+        except ChannelMissingSettingError as e:
+            logger.warning("[Trade Engine]: %s", e)
+            
         finally:
-            await self.stop()
+            is_shutdown = await self.shutdown()
+            if is_shutdown:
+                self._state_mgr.transition_to(EngineState.TERMINATED)
+
              
 if __name__ == "__main__":...
