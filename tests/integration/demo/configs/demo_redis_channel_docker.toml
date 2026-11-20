@@ -6,11 +6,11 @@ in_streams = [] # to be added dynamically, e.g. mkd_data:WTI:OHLCV, order_status
 out_streams = ["CMD:DataEngineCQG", "CMD:TradeEngineCQG", "CMD:MonitorEngine"]
 
 [data_engine_streams]
-in_streams = ["CMD:DataEngine"]
+in_streams = ["CMD:DataEngineCQG"]
 out_streams = [] # to be added dynamically, e.g. mkd_data:WTI
 
 [trade_engine_streams]
-in_streams = ["CMD:TradeEngine"]  # to be added dynamically, e.g order_info:WTI
+in_streams = ["CMD:TradeEngineCQG"]  # to be added dynamically, e.g order_info:WTI
 out_streams = []
 
 [monitor_engine_streams]

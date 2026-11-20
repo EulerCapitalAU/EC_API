@@ -293,7 +293,7 @@ class TradeEngineCQG:
         self._send_order_tasks: dict[str, asyncio.Task] = dict()
         
         # ---- Channel and Control----
-        self.CTRL_STREAM: str = "CMD:Trade_Engine"
+        self.CTRL_STREAM: str = "CMD:TradeEngineCQG"
         self.controller: Controller = TradeEngineController(
             self.trade_session, self.channel, self.PREC
             )

@@ -9,7 +9,7 @@
     :root {
       --bg: #0b0f17; --panel: #111827; --panel-2: #0f172a; --border: #1f2937;
       --text: #e5e7eb; --muted: #94a3b8; --accent: #60a5fa; --danger: #f87171;
-      --pill-bg: #1e293b; --pill-bd: #334155; --input-bg: #0b1220; --input-bd: #23324a;
+      --pill-bg: #1e293b; --pill-bd: #334155; --input-bg: #0b1220; --input-bd: #23324a; --good: #4ade80;
       --radius: 14px; --radius-sm: 10px; --gap: 14px;
     }
     * { box-sizing: border-box; }
@@ -40,15 +40,23 @@
     button:active { transform: translateY(1px); }
     .btn-accent { border-color: #3b82f6; box-shadow: inset 0 0 0 1px rgba(59,130,246,.3); }
     .btn-danger { border-color: #ef4444; box-shadow: inset 0 0 0 1px rgba(239,68,68,.35); }
-    
-    .transport { display: flex; gap: 10px; align-items: center; }
+
+    .transport { display: flex; gap: 10px; align-items: center; justify-content: center; }
+
     .btn-circle {
-      width: 42px; height: 42px; border-radius: 50%; padding: 0;
+      width: 42px; height: 42px; border-radius: var(--radius-sm); padding: 0;
       display: inline-flex; align-items: center; justify-content: center;
       font-size: 15px; line-height: 1;
+      border: 2px solid var(--accent);
     }
-    .btn-kill { color: #ef4444; border-color: #ef4444; }
-    .btn-kill:hover { background: #ef4444; color: #0b0f17; }
+    .btn-kill { color: #ef4444; }
+    .btn-kill:hover { background: var(--accent); color: #0b0f17; }
+
+    .av-toggle .av-on { color: var(--good); border-color: var(--good); }
+    .av-toggle .av-on:hover { background: var(--good); color: #0b0f17; }
+    .av-toggle .av-off { color: var(--danger); border-color: var(--danger); }
+    .av-toggle .av-off:hover { background: var(--danger); color: #0b0f17; }
+
     .av-toggle { display: inline-flex; }
     .av-toggle[data-state="off"] .av-off,
     .av-toggle[data-state="on"] .av-on,
@@ -59,7 +67,7 @@
 
     .app {
       display: grid;
-      grid-template-columns: 1fr 2fr 3fr;
+      grid-template-columns: 1fr 1.5fr 0.5fr 3fr;
       min-height: calc(100vh - 57px);
     }
 
@@ -71,13 +79,24 @@
       border-right: 1px solid var(--border); padding: 20px;
       display: flex; flex-direction: column; gap: var(--gap);
     }
+    .symbols-col {
+      border-right: 1px solid var(--border); padding: 20px;
+      display: flex; flex-direction: column; gap: var(--gap);
+    }
     .display-col { padding: 20px; display: flex; flex-direction: column; gap: var(--gap); }
 
     .tab-label {
-      display: block; padding: 10px 14px; border-radius: var(--radius-sm);
+      display: flex; align-items: center;
+      padding: 10px 14px; border-radius: var(--radius-sm);
       color: var(--muted); cursor: pointer; user-select: none;
     }
     .tab-label:hover { background: var(--panel); color: var(--text); }
+
+    .status-dot {
+      display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+      background: var(--danger); margin-right: 8px; flex-shrink: 0;
+    }
+    .status-dot.online { background: var(--good); }
 
     .page { display: none; flex-direction: column; gap: var(--gap); }
 
@@ -87,10 +106,13 @@
       background: var(--panel); color: var(--text); box-shadow: inset 2px 0 0 var(--accent);
     }
     #tab-data:checked ~ .app #control-data,
+    #tab-data:checked ~ .app #symbols-data,
     #tab-data:checked ~ .app #display-data,
     #tab-trade:checked ~ .app #control-trade,
+    #tab-trade:checked ~ .app #symbols-trade,
     #tab-trade:checked ~ .app #display-trade,
     #tab-monitor:checked ~ .app #control-monitor,
+    #tab-monitor:checked ~ .app #symbols-monitor,
     #tab-monitor:checked ~ .app #display-monitor {
       display: flex;
     }
@@ -129,43 +151,45 @@
 
   <div class="app">
     <nav class="nav-col">
-      <label for="tab-data" class="tab-label">Data Engine</label>
-      <label for="tab-trade" class="tab-label">Trade Engine</label>
-      <label for="tab-monitor" class="tab-label">Monitor Engine</label>
+      <label for="tab-data" class="tab-label"><span class="status-dot" id="status-data"></span>Data Engine</label>
+      <label for="tab-trade" class="tab-label"><span class="status-dot" id="status-trade"></span>Trade Engine</label>
+      <label for="tab-monitor" class="tab-label"><span class="status-dot" id="status-monitor"></span>Monitor Engine</label>
     </nav>
 
     <main class="control-col">
       <section id="control-data" class="page">
         <div class="panel">
           <h2>Engine Control</h2>
-            <div class="row transport">
-              <div class="av-toggle" data-state="off">
-                <button class="btn-accent btn-circle av-on" title="Start"
-                  hx-post="/action/cmd/start_data_engine" hx-swap="none"
-                  hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'
-                  onclick="this.closest('.av-toggle').dataset.state='on'">&#9679;</button>
-                <button class="btn-danger btn-circle av-off" title="Stop"
-                  hx-post="/action/cmd/stop_data_engine" hx-swap="none"
-                  hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'
-                  onclick="this.closest('.av-toggle').dataset.state='off'">&#9632;</button>
-              </div>
-            
-              <div class="av-toggle" data-state="play">
-                <button class="btn-accent btn-circle av-pause" title="Pause"
-                  hx-post="/action/cmd/freeze_data_engine" hx-swap="none"
-                  hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'
-                  onclick="this.closest('.av-toggle').dataset.state='pause'">&#9208;</button>
-                <button class="btn-accent btn-circle av-play" title="Resume"
-                  hx-post="/action/cmd/unfreeze_data_engine" hx-swap="none"
-                  hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'
-                  onclick="this.closest('.av-toggle').dataset.state='play'">&#9654;</button>
-              </div>
-            
-              <button class="btn-kill bt
-                hx-post="/action/cmd/shutdown_data_engine" hx-swap="none"
-                hx-confirm="Shut down thal — the process will need arestart."
-                hx-headers='js:{"X-API-Kdocument.getElementById("apiKey").value}'>&#10005;</button>
+          <div class="row transport">
+            <div class="av-toggle" data-state="off">
+              <button class="btn-circle av-on" title="Start"
+                hx-post="/action/cmd/start_data_engine" hx-swap="none"
+                hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'
+                onclick="this.closest('.av-toggle').dataset.state='on'; document.getElementById('freeze-data').dataset.state='play';">&#9211;</button>
+              <button class="btn-circle av-off" title="Stop"
+                hx-post="/action/cmd/stop_data_engine" hx-swap="none"
+                hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'
+                onclick="this.closest('.av-toggle').dataset.state='off'; document.getElementById('freeze-data').dataset.state='pause';">&#9211;</button>
             </div>
+
+            <div class="av-toggle" data-state="pause" id="freeze-data">
+              <button class="btn-accent btn-circle av-pause" title="Pause"
+                hx-post="/action/cmd/freeze_data_engine" hx-swap="none"
+                hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'
+                onclick="this.closest('.av-toggle').dataset.state='pause'">&#9208;</button>
+              <button class="btn-accent btn-circle av-play" title="Resume"
+                hx-post="/action/cmd/unfreeze_data_engine" hx-swap="none"
+                hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'
+                onclick="this.closest('.av-toggle').dataset.state='play'">&#9654;</button>
+            </div>
+
+            <button class="btn-kill btn-circle" title="Kill"
+              hx-post="/action/cmd/shutdown_data_engine" hx-swap="none"
+              hx-confirm="Shut down the data engine — the process will need a restart."
+              hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'>&#10005;</button>
+          </div>
+        </div>
+
         <div class="panel">
           <h2>Data Feeds</h2>
           <form class="col">
@@ -182,42 +206,41 @@
                 hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'>Remove All</button>
             </div>
           </form>
-          <div id="feeds-list" hx-get="/ui/feeds" hx-trigger="load"
-            hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'></div>
         </div>
       </section>
 
       <section id="control-trade" class="page">
         <div class="panel">
           <h2>Engine Control</h2>
-            <div class="row transport">
-              <div class="av-toggle" data-state="off">
-                <button class="btn-accent btn-circle av-on" title="Start"
-                  hx-post="/action/cmd/start_trade_engine" hx-swap="none"
-                  hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'
-                  onclick="this.closest('.av-toggle').dataset.state='on'">&#9679;</button>
-                <button class="btn-danger btn-circle av-off" title="Stop"
-                  hx-post="/action/cmd/stop_trade_engine" hx-swap="none"
-                  hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'
-                  onclick="this.closest('.av-toggle').dataset.state='off'">&#9632;</button>
-              </div>
-            
-              <div class="av-toggle" data-state="play">
-                <button class="btn-accent btn-circle av-pause" title="Pause"
-                  hx-post="/action/cmd/freeze_trade_engine" hx-swap="none"
-                  hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'
-                  onclick="this.closest('.av-toggle').dataset.state='pause'">&#9208;</button>
-                <button class="btn-accenResume"
-                  hx-post="/action/cmd/unfreeze_trade_engine" hx-swap="none"
-                  hx-headers='js:{"X-APId("apiKey").value}'
-                  onclick="this.closest('.av-toggle').dataset.state='play'">&#9654;</button>
-              </div>
-            
-              <button class="btn-kill bt
-                hx-post="/action/cmd/shutdown_trade_engine" hx-swap="none"
-                hx-confirm="Shut down thnal — the process will need a restart."
-                hx-headers='js:{"X-API-Kdocument.getElementById("apiKey").value}'>&#10005;</button>
+          <div class="row transport">
+            <div class="av-toggle" data-state="off">
+              <button class="btn-circle av-on" title="Start"
+                hx-post="/action/cmd/start_trade_engine" hx-swap="none"
+                hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'
+                onclick="this.closest('.av-toggle').dataset.state='on'; document.getElementById('freeze-trade').dataset.state='play';">&#9211;</button>
+              <button class="btn-circle av-off" title="Stop"
+                hx-post="/action/cmd/stop_trade_engine" hx-swap="none"
+                hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'
+                onclick="this.closest('.av-toggle').dataset.state='off'; document.getElementById('freeze-trade').dataset.state='pause';">&#9211;</button>
             </div>
+
+            <div class="av-toggle" data-state="pause" id="freeze-trade">
+              <button class="btn-accent btn-circle av-pause" title="Pause"
+                hx-post="/action/cmd/freeze_trade_engine" hx-swap="none"
+                hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'
+                onclick="this.closest('.av-toggle').dataset.state='pause'">&#9208;</button>
+              <button class="btn-accent btn-circle av-play" title="Resume"
+                hx-post="/action/cmd/unfreeze_trade_engine" hx-swap="none"
+                hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'
+                onclick="this.closest('.av-toggle').dataset.state='play'">&#9654;</button>
+            </div>
+
+            <button class="btn-kill btn-circle" title="Kill"
+              hx-post="/action/cmd/shutdown_trade_engine" hx-swap="none"
+              hx-confirm="Shut down the trade engine — the process will need a restart."
+              hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'>&#10005;</button>
+          </div>
+        </div>
 
         <div class="panel">
           <h2>Risk Control</h2>
@@ -237,6 +260,27 @@
       </section>
     </main>
 
+    <aside class="symbols-col">
+      <section id="symbols-data" class="page">
+        <div class="panel">
+          <h2>Active Symbols</h2>
+          <div id="feeds-list" hx-get="/ui/feeds" hx-trigger="load"
+            hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'></div>
+        </div>
+      </section>
+
+      <section id="symbols-trade" class="page">
+        <div class="panel">
+          <h2 class="muted">Active Symbols</h2>
+        </div>
+      </section>
+
+      <section id="symbols-monitor" class="page">
+        <div class="panel">
+          <h2 class="muted">Active Symbols</h2>
+        </div>
+      </section>
+    </aside>
 
     <aside class="display-col">
       <section id="display-data" class="page">
