@@ -264,7 +264,7 @@ async def action_start_trade_engine(
     ) -> None:
     await control_panel.start_trade_engine()
     
-@router.post("/action/cmd/start_trade_engine", response_class=HTMLResponse, dependencies=[Depends(require_api_key)])
+@router.post("/action/cmd/stop_trade_engine", response_class=HTMLResponse, dependencies=[Depends(require_api_key)])
 async def action_stop_trade_engine(
     request: Request, control_panel: ControlPanel = Depends(get_control_panel)
     ) -> None:
@@ -318,7 +318,7 @@ async def action_start_data_engine(
     ) -> None:
     await control_panel.start_data_engine()
     
-@router.post("/action/cmd/start_data_engine", response_class=HTMLResponse, dependencies=[Depends(require_api_key)])
+@router.post("/action/cmd/stop_data_engine", response_class=HTMLResponse, dependencies=[Depends(require_api_key)])
 async def action_stop_data_engine(
     request: Request, control_panel: ControlPanel = Depends(get_control_panel)
     ) -> None:

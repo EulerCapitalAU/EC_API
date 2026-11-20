@@ -40,6 +40,20 @@
     button:active { transform: translateY(1px); }
     .btn-accent { border-color: #3b82f6; box-shadow: inset 0 0 0 1px rgba(59,130,246,.3); }
     .btn-danger { border-color: #ef4444; box-shadow: inset 0 0 0 1px rgba(239,68,68,.35); }
+    
+    .transport { display: flex; gap: 10px; align-items: center; }
+    .btn-circle {
+      width: 42px; height: 42px; border-radius: 50%; padding: 0;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 15px; line-height: 1;
+    }
+    .btn-kill { color: #ef4444; border-color: #ef4444; }
+    .btn-kill:hover { background: #ef4444; color: #0b0f17; }
+    .av-toggle { display: inline-flex; }
+    .av-toggle[data-state="off"] .av-off,
+    .av-toggle[data-state="on"] .av-on,
+    .av-toggle[data-state="play"] .av-play,
+    .av-toggle[data-state="pause"] .av-pause { display: none; }
 
     .tab-radio { display: none; }
 
@@ -124,16 +138,34 @@
       <section id="control-data" class="page">
         <div class="panel">
           <h2>Engine Control</h2>
-          <div class="row">
-            <button class="btn-accent" hx-post="/action/cmd/freeze_data_engine"
-              hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'>Freeze</button>
-            <button class="btn-accent" hx-post="/action/cmd/unfreeze_data_engine"
-              hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'>Unfreeze</button>
-            <button class="btn-danger" hx-post="/action/cmd/shutdown_data_engine"
-              hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'>Shutdown</button>
-          </div>
-        </div>
-
+            <div class="row transport">
+              <div class="av-toggle" data-state="off">
+                <button class="btn-accent btn-circle av-on" title="Start"
+                  hx-post="/action/cmd/start_data_engine" hx-swap="none"
+                  hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'
+                  onclick="this.closest('.av-toggle').dataset.state='on'">&#9679;</button>
+                <button class="btn-danger btn-circle av-off" title="Stop"
+                  hx-post="/action/cmd/stop_data_engine" hx-swap="none"
+                  hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'
+                  onclick="this.closest('.av-toggle').dataset.state='off'">&#9632;</button>
+              </div>
+            
+              <div class="av-toggle" data-state="play">
+                <button class="btn-accent btn-circle av-pause" title="Pause"
+                  hx-post="/action/cmd/freeze_data_engine" hx-swap="none"
+                  hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'
+                  onclick="this.closest('.av-toggle').dataset.state='pause'">&#9208;</button>
+                <button class="btn-accent btn-circle av-play" title="Resume"
+                  hx-post="/action/cmd/unfreeze_data_engine" hx-swap="none"
+                  hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'
+                  onclick="this.closest('.av-toggle').dataset.state='play'">&#9654;</button>
+              </div>
+            
+              <button class="btn-kill bt
+                hx-post="/action/cmd/shutdown_data_engine" hx-swap="none"
+                hx-confirm="Shut down thal — the process will need arestart."
+                hx-headers='js:{"X-API-Kdocument.getElementById("apiKey").value}'>&#10005;</button>
+            </div>
         <div class="panel">
           <h2>Data Feeds</h2>
           <form class="col">
@@ -158,15 +190,34 @@
       <section id="control-trade" class="page">
         <div class="panel">
           <h2>Engine Control</h2>
-          <div class="row">
-            <button class="btn-accent" hx-post="/action/cmd/freeze_trade_engine"
-              hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'>Freeze</button>
-            <button class="btn-accent" hx-post="/action/cmd/unfreeze_trade_engine"
-              hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'>Unfreeze</button>
-            <button class="btn-danger" hx-post="/action/cmd/shutdown_trade_engine"
-              hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'>Shutdown</button>
-          </div>
-        </div>
+            <div class="row transport">
+              <div class="av-toggle" data-state="off">
+                <button class="btn-accent btn-circle av-on" title="Start"
+                  hx-post="/action/cmd/start_trade_engine" hx-swap="none"
+                  hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'
+                  onclick="this.closest('.av-toggle').dataset.state='on'">&#9679;</button>
+                <button class="btn-danger btn-circle av-off" title="Stop"
+                  hx-post="/action/cmd/stop_trade_engine" hx-swap="none"
+                  hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'
+                  onclick="this.closest('.av-toggle').dataset.state='off'">&#9632;</button>
+              </div>
+            
+              <div class="av-toggle" data-state="play">
+                <button class="btn-accent btn-circle av-pause" title="Pause"
+                  hx-post="/action/cmd/freeze_trade_engine" hx-swap="none"
+                  hx-headers='js:{"X-API-Key": document.getElementById("apiKey").value}'
+                  onclick="this.closest('.av-toggle').dataset.state='pause'">&#9208;</button>
+                <button class="btn-accenResume"
+                  hx-post="/action/cmd/unfreeze_trade_engine" hx-swap="none"
+                  hx-headers='js:{"X-APId("apiKey").value}'
+                  onclick="this.closest('.av-toggle').dataset.state='play'">&#9654;</button>
+              </div>
+            
+              <button class="btn-kill bt
+                hx-post="/action/cmd/shutdown_trade_engine" hx-swap="none"
+                hx-confirm="Shut down thnal — the process will need a restart."
+                hx-headers='js:{"X-API-Kdocument.getElementById("apiKey").value}'>&#10005;</button>
+            </div>
 
         <div class="panel">
           <h2>Risk Control</h2>
