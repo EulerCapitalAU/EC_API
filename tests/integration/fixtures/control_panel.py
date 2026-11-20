@@ -29,10 +29,10 @@ class ControlPanel:
         self.CMD_CTRL_data_engine: str = "CMD:DataEngineCQG"
         self.CMD_CTRL_monitor_engine: str = "CMD:MonitorEngine"
         
-    def start(self):
-        self.channel.connect()
+    async def start(self):
+        await self.channel.connect()
         
-    def stop(self):
+    async def stop(self):
         self.channel.disconnect()
 
     # ------ observation ------
@@ -99,6 +99,30 @@ class ControlPanel:
             ("CMD:remove_stream", stream_name), 
             self.CMD_CTRL_trade_engine
             )
+      
+    async def send_cancelall_order(self) -> None:
+        await self.channel.broadcast(
+            ("CMD:cancel_all_request", ""), 
+            self.CMD_CTRL_trade_engine
+            )
+
+    async def send_goflat_order(self) -> None:
+        await self.channel.broadcast(
+            ("CMD:goflat_request", ""), 
+            self.CMD_CTRL_trade_engine
+            )
+        
+    async def start_trade_engine(self) -> None:
+        await self.channel.broadcast(
+            ("CMD:start_engine", ""), 
+            self.CMD_CTRL_trade_engine
+            )
+        
+    async def stop_trade_engine(self) -> None:
+        await self.channel.broadcast(
+            ("CMD:stop_engine", ""), 
+            self.CMD_CTRL_trade_engine
+            )
         
     async def freeze_trade_engine(self) -> None:
         await self.channel.broadcast(
@@ -118,17 +142,7 @@ class ControlPanel:
             self.CMD_CTRL_trade_engine
             )
 
-    async def send_cancelall_order(self) -> None:
-        await self.channel.broadcast(
-            ("CMD:cancel_all_request", ""), 
-            self.CMD_CTRL_trade_engine
-            )
 
-    async def send_goflat_order(self) -> None:
-        await self.channel.broadcast(
-            ("CMD:goflat_request", ""), 
-            self.CMD_CTRL_trade_engine
-            )
     
     # ------ Data Engine functions ------
     async def _add_stream_data_engine(self, stream_name: str) -> None:
@@ -143,6 +157,18 @@ class ControlPanel:
             self.CMD_CTRL_data_engine
             )
     
+    async def start_data_engine(self) -> None:
+        await self.channel.broadcast(
+            ("CMD:start_engine", ""), 
+            self.CMD_CTRL_data_engine
+            )
+        
+    async def stop_data_engine(self) -> None:
+        await self.channel.broadcast(
+            ("CMD:stop_engine", ""), 
+            self.CMD_CTRL_data_engine
+            )
+        
     async def freeze_data_engine(self) -> None:
         await self.channel.broadcast(
             ("CMD:freeze_engine", ""), 
@@ -232,6 +258,18 @@ async def ui_feeds(request: Request, control_panel: ControlPanel = Depends(get_c
     return await _feeds_partial(request, control_panel)
 
 # ----- Trade Engine -----
+@router.post("/action/cmd/start_trade_engine", response_class=HTMLResponse, dependencies=[Depends(require_api_key)])
+async def action_start_trade_engine(
+    request: Request, control_panel: ControlPanel = Depends(get_control_panel)
+    ) -> None:
+    await control_panel.start_trade_engine()
+    
+@router.post("/action/cmd/start_trade_engine", response_class=HTMLResponse, dependencies=[Depends(require_api_key)])
+async def action_stop_trade_engine(
+    request: Request, control_panel: ControlPanel = Depends(get_control_panel)
+    ) -> None:
+    await control_panel.stop_trade_engine()
+
 @router.post("/action/cmd/freeze_trade_engine", response_class=HTMLResponse, dependencies=[Depends(require_api_key)])
 async def action_freeze_trade_engine(
     request: Request, control_panel: ControlPanel = Depends(get_control_panel)
@@ -274,6 +312,18 @@ async def action_cancelall(
     return templates.TemplateResponse(request, "partials/flash.html", {"msg": "CancelAll sent"})
 
 # ----- Data Engine -----
+@router.post("/action/cmd/start_data_engine", response_class=HTMLResponse, dependencies=[Depends(require_api_key)])
+async def action_start_data_engine(
+    request: Request, control_panel: ControlPanel = Depends(get_control_panel)
+    ) -> None:
+    await control_panel.start_data_engine()
+    
+@router.post("/action/cmd/start_data_engine", response_class=HTMLResponse, dependencies=[Depends(require_api_key)])
+async def action_stop_data_engine(
+    request: Request, control_panel: ControlPanel = Depends(get_control_panel)
+    ) -> None:
+    await control_panel.stop_data_engine()
+
 @router.post("/action/cmd/freeze_data_engine", response_class=HTMLResponse, dependencies=[Depends(require_api_key)])
 async def action_freeze_data_engine(
         request: Request,

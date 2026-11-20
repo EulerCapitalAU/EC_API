@@ -6,7 +6,7 @@ msgpack
 redis>=4.2.0
 aiosqlite>=0.22.1
 asyncpg
-
+python-multipart
 
 
 

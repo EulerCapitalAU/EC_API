@@ -8,4 +8,4 @@ COPY requirements.txt requirements-dev.txt conanfile.txt ./
 RUN pip install --no-cache-dir -r requirements.txt -r requirements-dev.txt
 
 COPY . .
-RUN pip install -e .
+RUN pip install -e . --no-deps
