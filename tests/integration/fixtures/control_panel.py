@@ -188,9 +188,33 @@ class ControlPanel:
             )
         
     # ------ Monitor Engine functions ------
-    async def freeze_monitor_engine(self) -> None:...
-    async def unfreeze_monitor_engine(self) -> None:...
-    async def shutdown_monitor_engine(self) -> None:...
+    async def start_monitor_engine(self) -> None:
+        await self.channel.broadcast(
+            ("CMD:start_engine", ""), 
+            self.CMD_CTRL_monitor_engine
+            )
+    async def stop_monitor_engine(self) -> None:
+        await self.channel.broadcast(
+            ("CMD:stop_engine", ""), 
+            self.CMD_CTRL_monitor_engine
+            )
+        
+    async def freeze_monitor_engine(self) -> None:
+        await self.channel.broadcast(
+            ("CMD:freeze_engine", ""), 
+            self.CMD_CTRL_monitor_engine
+            )
+        
+    async def unfreeze_monitor_engine(self) -> None:
+        await self.channel.broadcast(
+            ("CMD:unfreeze_engine", ""), 
+            self.CMD_CTRL_monitor_engine
+            )
+    async def shutdown_monitor_engine(self) -> None:
+        await self.channel.broadcast(
+            ("CMD:shutdown_engine", ""), 
+            self.CMD_CTRL_monitor_engine
+            )
     
     async def set_datafeeds_config(self) -> None:...
 

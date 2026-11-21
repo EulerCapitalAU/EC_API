@@ -67,7 +67,7 @@
 
     .app {
       display: grid;
-      grid-template-columns: 1fr 1.5fr 0.5fr 3fr;
+      grid-template-columns: 1.0fr 1.5fr minmax(0, 1fr) 2.5fr;
       min-height: calc(100vh - 57px);
     }
 
@@ -76,12 +76,39 @@
       display: flex; flex-direction: column; gap: 4px;
     }
     .control-col {
-      border-right: 1px solid var(--border); padding: 20px;
+      border-right: 1px solid var(--border); padding: 10px;
       display: flex; flex-direction: column; gap: var(--gap);
     }
     .symbols-col {
-      border-right: 1px solid var(--border); padding: 20px;
+      border-right: 1px solid var(--border); padding: 2px;
       display: flex; flex-direction: column; gap: var(--gap);
+      background: #16213d; /* lighter dark blue than --panel-2 */
+      min-width: 0;
+      overflow: hidden; 
+    }
+    .symbols-col .page {
+      flex: 1; min-height: 0;  /* let the active section claim the column's full height */
+    }
+    .symbols-col .panel {
+      flex: 1; min-height: 0;
+      display: flex; flex-direction: column;
+    }
+    #feeds-list {
+      flex: 1; min-height: 0;
+      display: flex; flex-direction: column;
+    }
+    .symbol-scroll {
+      flex: 1; min-height: 0;
+      overflow: auto;          /* scrollbars kick in only once content exceeds the filled space */
+    }
+    .symbol-table td {
+      min-width: 100%;
+      border-collapse: collapse; 
+      /*border: 1px solid #2d3f6b;
+      padding: 6px 10px; height: 24px;
+      font-size: 12px; font-weight: 600;
+      background: #1b294a; color: var(--text);
+      white-space: nowrap;    */ /* long text stays on one line -> scrolls instead of growing */
     }
     .display-col { padding: 20px; display: flex; flex-direction: column; gap: var(--gap); }
 
@@ -151,8 +178,8 @@
 
   <div class="app">
     <nav class="nav-col">
-      <label for="tab-data" class="tab-label"><span class="status-dot" id="status-data"></span>Data Engine</label>
-      <label for="tab-trade" class="tab-label"><span class="status-dot" id="status-trade"></span>Trade Engine</label>
+      <label for="tab-data" class="tab-label"><span class="status-dot" id="status-data"></span>Data Engine [CQG]</label>
+      <label for="tab-trade" class="tab-label"><span class="status-dot" id="status-trade"></span>Trade Engine [CQG]</label>
       <label for="tab-monitor" class="tab-label"><span class="status-dot" id="status-monitor"></span>Monitor Engine</label>
     </nav>
 

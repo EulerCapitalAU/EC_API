@@ -1,9 +1,10 @@
-<div>
-  {% if symbols %}
-    {% for s in symbols %}
-      <span class="pill">{{ s }}</span>
-    {% endfor %}
-  {% else %}
-    <div class="muted">No active symbols</div>
-  {% endif %}
+{% set max_rows = 100 %}
+<div class="symbol-scroll">
+  <table class="symbol-table">
+    <tbody>
+      {% for i in range(max_rows) %}
+      <tr><td>{{ symbols[i] if i < symbols|length else "" }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
 </div>

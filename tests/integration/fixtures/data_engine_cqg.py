@@ -58,7 +58,9 @@ class DataEngineController(Controller):
         ):
         self._monitor = monitor
         self._channel = channel
-        self.SCOPE_MAP = {"mkt_data": MktDataSubLevel.LEVEL_TRADES}
+        self.SCOPE_MAP = {
+            "mkt_data": MktDataSubLevel.LEVEL_TRADES
+            }
             
     async def add_out_stream(
             self, out_stream_name: str,
